@@ -76,8 +76,8 @@ int main(int argc, const char** argv)
 	int backboardOffsetY							= 0;
 	int newPlayerWindowSize 						= 50;
 	PlayerObs newPlayerWindow[newPlayerWindowSize];  
-	vector <int> hTableRange;
-	Point hgtRings[newPlayerWindowSize][1200];
+	vector <int> radiusArray;
+	Point courtArc[newPlayerWindowSize][1200];
 	Mat threshold_output;
 	vector<Vec4i> hierarchy;
 	namedWindow("halfcourt", WINDOW_NORMAL);
@@ -93,15 +93,14 @@ int main(int argc, const char** argv)
     vector<Rect> bodys;
 	String body_cascade_name 						= "/home/fred/Pictures/OrgTrack_res/cascadeconfigs/haarcascade_fullbody.xml";
 	CascadeClassifier body_cascade; 
-	Mat imgBBallGray;
 	Mat firstFrame;
 	bool semiCircleReady 							= false;
 	Rect offsetBackboard;
-	Rect freezeBB;
+	Rect Backboard;
 	Point bodyPosit;
 	Point bbCenterPosit;
-	int freezeCenterX;
-	int freezeCenterY;
+	int BackboardCenterX;
+	int BackboardCenterY;
 	int leftImgBoundary;
 	int rightImgBoundary;
 	int topImgBoundary;
@@ -152,19 +151,21 @@ int main(int argc, const char** argv)
 			printf("--(!)Error loading body_cascade_name\n"); return -1; 
 		}
 
-		getGray(img,grayForRect);
-		blur(grayForRect, grayForRect, Size(3,3));
-		equalizeHist(grayForRect, grayForRect);
-		threshold(grayForRect,threshold_output,thresh,255, THRESH_BINARY);
-		findContours( threshold_output, boardContours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0, 0) );
+		getGray(img,grayForRect);											//Converts to a gray image.  All we need is a gray image for cv computing.
+		blur(grayForRect, grayForRect, Size(3,3));							//Blurs, i.e. smooths, an image using the normalized box filter.  Used to reduce noise.
+		equalizeHist(grayForRect, grayForRect);								//Equalizes the histogram of the input image.  Normalizes the brightness and increases the contrast of the image.
+		threshold(grayForRect,threshold_output,thresh,255, THRESH_BINARY);	//fixed-level thresholding.  Used here to produce a bi-level image.  Can also be used to remove noise.
+		findContours( threshold_output, boardContours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0, 0) );	//Finds contours in binary image. Contours are useful for shape analysis
+																														// and object detection & recognition.
 
 		vector< vector<Point> > contours_poly( boardContours.size() );
 		vector<Rect> boundRect( boardContours.size() );
 
 		///*************************Start of main code to detect BackBoard*************************
 		for ( size_t i = 0; i < boardContours.size(); i++ ) {
-			approxPolyDP(Mat(boardContours[i]),contours_poly[i],3,true);
-			boundRect[i] = boundingRect(Mat(contours_poly[i]));
+			approxPolyDP(Mat(boardContours[i]),contours_poly[i],3,true);	//Finds all polygon shapes in the contour input. Used later to find rectangles, i.e. basketball backboard.
+			boundRect[i] = boundingRect(Mat(contours_poly[i]));				//Converting all the polygons found into rectangles.
+																			//Below will be try to identify which one is the basketball backboard.
 		}
 		
 		double bb_ratio = 0.0;
@@ -173,29 +174,29 @@ int main(int argc, const char** argv)
 		///*************************End of main code to detect BackBoard*************************
 
 		///*******Start of main code to detect Basketball*************************
-        bg_model->apply(grayForRect, fgmask);
-
-		Canny(fgmask, fgmask, thresh, thresh*2, 3);
+        bg_model->apply(grayForRect, fgmask);				//Computes a foreground mask for the input video frame.
+		Canny(fgmask, fgmask, thresh, thresh*2, 3);			//Finds edges in an image.  Going to use it to help identify and track the basketball.
+															//Also used in the processing pipeline to identify the person(i.e. human body) shooting the ball.
 		
 		vector<vector<Point> > bballContours;
 		vector<Vec4i> hierarchy;
-		findContours(fgmask,bballContours,hierarchy,CV_RETR_TREE,CV_CHAIN_APPROX_SIMPLE, Point(0, 0) );
+		findContours(fgmask,bballContours,hierarchy,CV_RETR_TREE,CV_CHAIN_APPROX_SIMPLE, Point(0, 0) );	//Finds contours in foreground mask image.
 		
 		Mat imgBball = Mat::zeros(fgmask.size(),CV_8UC1);
 		for (size_t i = 0; i < bballContours.size(); i++ )
 		{
 			Scalar color = Scalar( rng.uniform(0, 255), rng.uniform(0, 255), rng.uniform(0, 255) );
-			drawContours(imgBball,bballContours,i,color,2,8,hierarchy,0,Point());
+			drawContours(imgBball,bballContours,i,color,2,8,hierarchy,0,Point());	//Draws contours onto output image, i.e. imgBball.
+																					//The goal here is the find and track the basketball inside of imgBball image frames.
 		}
-
 
 		//------------Track the basketball!!!!---------------
         vector<Vec3f> basketballTracker;
-		getGray(imgBball, imgBBallGray);
 		float canny1 = 100;
         float canny2 = 14; //16;
-		double minDist = imgBBallGray.rows/8; //4;
-		HoughCircles(imgBBallGray, basketballTracker, CV_HOUGH_GRADIENT, 1, minDist, canny1, canny2, 1, 9 );
+		double minDist = imgBball.rows/8; //4;
+		HoughCircles(imgBball, basketballTracker, CV_HOUGH_GRADIENT, 1, minDist, canny1, canny2, 1, 9 );	//Finds circles in input image. (imgBball)
+																											//Writes output to output array (basketballTracker)
 
 		if (basketballTracker.size() > 0)
 		{
@@ -233,11 +234,11 @@ int main(int argc, const char** argv)
 													boundRect[j].tl().y+backboardOffsetY, 
 													boundRect[j].size().width,
 													boundRect[j].size().height);
-									freezeBB = boundRect[j];
+									Backboard = boundRect[j];
 							    }
 								haveBackboard = true;
-								freezeCenterX = (freezeBB.tl().x+(freezeBB.width/2));
-								freezeCenterY = (freezeBB.tl().y+(freezeBB.height/2));
+								BackboardCenterX = (Backboard.tl().x+(Backboard.width/2));
+								BackboardCenterY = (Backboard.tl().y+(Backboard.height/2));
 							}
 						}
 						else if (fileNumber == 4) 
@@ -247,7 +248,7 @@ int main(int argc, const char** argv)
 							    if (!haveBackboard) 
 								{
 									//----------We chose our background and put it in freezeBB!!!--------------
-									freezeBB = boundRect[j];
+									Backboard = boundRect[j];
 
 									//----------Compute the offset for backboard on shot chart!!!---------------
 									backboardOffsetX = -boundRect[j].tl().x + img.size().width/2 - 13;
@@ -258,8 +259,8 @@ int main(int argc, const char** argv)
 													boundRect[j].size().height);
 							    }
 								haveBackboard = true;
-								freezeCenterX = (freezeBB.tl().x+(freezeBB.width/2));
-								freezeCenterY = (freezeBB.tl().y+(freezeBB.height/2));
+								BackboardCenterX = (Backboard.tl().x+(Backboard.width/2));
+								BackboardCenterY = (Backboard.tl().y+(Backboard.height/2));
 							}
 						}
 					}
@@ -273,7 +274,7 @@ int main(int argc, const char** argv)
 
 					//The basketball on video frames.
 					Scalar rngColor = Scalar( rng.uniform(0, 255), rng.uniform(0, 255), rng.uniform(0, 255) );
-					Rect objIntersect = freezeBB & bballRect;
+					Rect objIntersect = Backboard & bballRect;
 
 					//---Start of the process of identifying a shot at the basket!!!------------
 					if (objIntersect.area() > 0) {
@@ -308,39 +309,32 @@ int main(int argc, const char** argv)
 
 						if (frameCount > 220) 
 						{
-								if ((newPlayerWindow[0].position.x == 0) || (newPlayerWindow[0].position.y == 0))
-								{
-									circle(bbsrc, hgtRings[newPlayerWindow[0].radiusIdx][newPlayerWindow[0].placement], 1, Scalar(0, 165, 255), 3); 
-								}
-								else
-								{
-									circle(bbsrc, hgtRings[newPlayerWindow[0].radiusIdx][newPlayerWindow[0].placement], 1, Scalar(0, 165, 255), 3);
-								}
+							circle(bbsrc, courtArc[newPlayerWindow[0].radiusIdx][newPlayerWindow[0].placement], 1, Scalar(0, 165, 255), 3);
 						}
 
 						Point semiCircleCenterPt( (offsetBackboard.tl().x+offsetBackboard.width/2) , (offsetBackboard.tl().y + offsetBackboard.height/2) );
 						bbCenterPosit = semiCircleCenterPt;
 						
 						if (!semiCircleReady) {
-							int bCounter = 0;
+							int radiusIdx = 0;
 							for (int radius=40; radius < 280; radius+= 20)   //Radius for distFromBB
 							{
-								hTableRange.push_back(radius);
+								radiusArray.push_back(radius);
 								
 								int temp1, temp2, temp3;
 								int yval;
-								for (int x=bbCenterPosit.x-radius; x<=bbCenterPosit.x+radius; x++) 
+								for (int j=bbCenterPosit.x-radius; j<=bbCenterPosit.x+radius; j++)   //Using Pythagorean's theorem to find positions on the each court arc.
 								{
 									temp1 = radius * radius;
-									temp2 = (x - bbCenterPosit.x) * (x - bbCenterPosit.x);
+									temp2 = (j - bbCenterPosit.x) * (j - bbCenterPosit.x);
 									temp3 = temp1 - temp2;
 									yval = sqrt(temp3);
 									yval += bbCenterPosit.y;
-									Point ptTemp = Point(x, yval);
-									hgtRings[bCounter][x] = ptTemp;
+									Point ptTemp = Point(j, yval);
+									courtArc[radiusIdx][j] = ptTemp;
 								}
 								
-								bCounter++;
+								radiusIdx++;
 							}
 							semiCircleReady = true;
 						}
@@ -354,8 +348,8 @@ int main(int argc, const char** argv)
     	}
 
 	    //-- detect body 
-	    body_cascade.detectMultiScale(grayForRect, bodys, 1.1, 2, 18|9, Size(3,7));
-
+	    body_cascade.detectMultiScale(grayForRect, bodys, 1.1, 2, 18|9|CASCADE_SCALE_IMAGE, Size(3,7));  //Detects object of different sizes in the input image.
+	    																								 //This detector is looking for human bodies with min Size(3, 7) in a VGA image.
 		stringstream ss;
 		ss << frameCount;
 
@@ -377,46 +371,46 @@ int main(int argc, const char** argv)
 			newPlayerWindow[0].activeValue = 1;
 			newPlayerWindow[0].position = bodyCenter; //playerNewPosit;
 
-			double distFromBB = euclideanDist((double) freezeCenterX,(double) freezeCenterY,(double) bodyCenter.x, (double) bodyCenter.y);
-			double xDistFromBB = oneDDist(freezeCenterX, bodyCenter.x);
-			double yDistFromBB = oneDDist(freezeCenterY, bodyCenter.y);
+			double distFromBB = euclideanDist((double) BackboardCenterX,(double) BackboardCenterY,(double) bodyCenter.x, (double) bodyCenter.y);
+			double xDistFromBB = oneDDist(BackboardCenterX, bodyCenter.x);
+			double yDistFromBB = oneDDist(BackboardCenterY, bodyCenter.y);
 
 			if (distFromBB > 135)
 			{
-				newPlayerWindow[0].radiusIdx = hTableRange.size() * 0.99;
+				newPlayerWindow[0].radiusIdx = radiusArray.size() * 0.99;
 
 				distFromBB += 120;
 
-				int tempPlacement = (bbCenterPosit.x + hTableRange[newPlayerWindow[0].radiusIdx])
-								- (bbCenterPosit.x - hTableRange[newPlayerWindow[0].radiusIdx]);
+				int tempPlacement = (bbCenterPosit.x + radiusArray[newPlayerWindow[0].radiusIdx])
+								- (bbCenterPosit.x - radiusArray[newPlayerWindow[0].radiusIdx]);
 
-				if (bodyCenter.x > freezeCenterX) tempPlacement -= 1;
+				if (bodyCenter.x > BackboardCenterX) tempPlacement -= 1;
 				else tempPlacement = 0;
-				tempPlacement += (bbCenterPosit.x - hTableRange[newPlayerWindow[0].radiusIdx]);
+				tempPlacement += (bbCenterPosit.x - radiusArray[newPlayerWindow[0].radiusIdx]);
 
 				newPlayerWindow[0].placement = tempPlacement;
 			}
 			else if (distFromBB < 30)
 			{
 				int tempPlacement;
-				if (bodyCenter.x < freezeCenterX) tempPlacement = 0;
-				else tempPlacement = (bbCenterPosit.x + hTableRange[newPlayerWindow[0].radiusIdx])
-								- (bbCenterPosit.x - hTableRange[newPlayerWindow[0].radiusIdx]) - 1;
+				if (bodyCenter.x < BackboardCenterX) tempPlacement = 0;
+				else tempPlacement = (bbCenterPosit.x + radiusArray[newPlayerWindow[0].radiusIdx])
+								- (bbCenterPosit.x - radiusArray[newPlayerWindow[0].radiusIdx]) - 1;
 
 				newPlayerWindow[0].placement = tempPlacement;
-				newPlayerWindow[0].radiusIdx = hTableRange.size() * 0.01;
+				newPlayerWindow[0].radiusIdx = radiusArray.size() * 0.01;
 			}
 			else
 			{
 				if (bodys[j].height < 170)    //NOTE:  If not true, then we have inaccurate calculation of body height from detectMultiscale method.  Do not estimate a player position for it.
 				{
-					newPlayerWindow[0].radiusIdx = findIndex_BSearch(hTableRange, distFromBB);
+					newPlayerWindow[0].radiusIdx = findIndex_BSearch(radiusArray, distFromBB);
 					newPlayerWindow[0].radiusIdx += 5;
 					if ((xDistFromBB < 51) && (yDistFromBB < 70)) newPlayerWindow[0].radiusIdx = 0;
 					
 					double percentPlacement = (double) (bodyCenter.x - leftImgBoundary) / (rightImgBoundary - leftImgBoundary);
-					int leftRingBound		= bbCenterPosit.x - hTableRange[newPlayerWindow[0].radiusIdx];
-					int rightRingBound		= bbCenterPosit.x + hTableRange[newPlayerWindow[0].radiusIdx];
+					int leftRingBound		= bbCenterPosit.x - radiusArray[newPlayerWindow[0].radiusIdx];
+					int rightRingBound		= bbCenterPosit.x + radiusArray[newPlayerWindow[0].radiusIdx];
 					int chartPlacementTemp	= (rightRingBound - leftRingBound) * percentPlacement;
 					int chartPlacement		= leftRingBound + chartPlacementTemp;
 
