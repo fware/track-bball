@@ -229,9 +229,6 @@ int main(int argc, const char** argv)
 				int bballYtl = (int)(basketballTracker[i][1]-bballRadius);
 				bballRect = Rect(bballXtl, bballYtl, bballDiameter, bballDiameter);
 
-				//-------We chose what we think is the basketball and put it in basketballChoice!!!---------
-				Rect basketballChoice = bballRect;
-
 				for (size_t j = 0; j < boardContours.size(); j++) 
 				{
 					bb_w = (double) boundRect[j].size().width;
@@ -299,10 +296,6 @@ int main(int argc, const char** argv)
 					Scalar rngColor = Scalar( rng.uniform(0, 255), rng.uniform(0, 255), rng.uniform(0, 255) );
 					Rect objIntersect = freezeBB & bballRect;
 
-					//rectangle(img, basketballChoice.tl(), basketballChoice.br(), Scalar(0,180,255), 2, 8, 0 );
-					//rectangle(img, freezeBB.tl(), freezeBB.br(), Scalar(180,50,0), 2, 8, 0 );
-
-
 					//---Start of the process of identifying a shot at the basket!!!------------
 					if (objIntersect.area() > 0) {
 						
@@ -332,10 +325,6 @@ int main(int argc, const char** argv)
 							playerPositAvg = newPlayerWindow[newPlayerWindowSize-1].position;
 							playerHeightIndex = newPlayerWindow[newPlayerWindowSize-1].radiusIdx;
 							playerPlacement = newPlayerWindow[newPlayerWindowSize-1].placement;
-							//cout << "playerPositAvg[newPlayerWindowSize-1]=" << playerPositAvg
-							//	 << "   playerHeightIndex[newPlayerWindowSize-1]=" << playerHeightIndex
-							//	 << "   playerPlacement[newPlayerWindowSize-1]=" << playerPlacement
-							//	 << endl;
 							cout << "newPlayerWindow[0].frameCount=" << newPlayerWindow[0].frameCount
 							     << "newPlayerWindow[0].position=" << newPlayerWindow[0].position
 								 << "   newPlayerWindow[0].radiusIdx=" << newPlayerWindow[0].radiusIdx
@@ -362,13 +351,6 @@ int main(int argc, const char** argv)
 								}
 								else
 								{
-									//cout << frameCount << ":"
-									//	 << "	 freezeCenter="		   		<< Point(freezeCenterX,freezeCenterY)
-									//	 << "	 Chosen  playerPositAvg="	<<	playerPositAvg
-									//	 << "	 hgtRings["					<< playerHeightIndex
-									//	 << "]["							<< playerPlacement
-									//	 << "]="							<< hgtRings[playerHeightIndex][playerPlacement]
-									//	 << endl;
 									cout << frameCount << ":"
 										 << "	 freezeCenter="		   		<< Point(freezeCenterX,freezeCenterY)
 										 << "	 Chosen  newPlayerWindow[0].position="	<< newPlayerWindow[0].position
