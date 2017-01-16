@@ -38,7 +38,6 @@ void getGray(const Mat& image, Mat& gray);
 double DistanceToCamera(double knownWidth, double focalLength, double perWidth);
 int getPlayerOffsetX(int frame_count, float player_pos_x, float player_pos_y, int player_hgt);
 int getPlayerOffsetY(int frame_count, float player_pos_x, float player_pos_y, int player_hgt);
-//vector<Point> get_sliding_windows(Mat& image, int winWidth);
 Mat drawSemiCircle(Mat& image, int radius, Point center);
 //float euclideanDist(Point& p, Point& q);
 double euclideanDist(double x1, double y1, double x2, double y2);
@@ -87,19 +86,18 @@ int main(int argc, const char** argv)
 //    namedWindow("image", WINDOW_NORMAL);
 	namedWindow("halfcourt", WINDOW_NORMAL);
 
-	Ptr<BackgroundSubtractorMOG2> bg_model;
-    bg_model 										= createBackgroundSubtractorMOG2(30, 16.0, false);	//Creates MOG2 Background Subtractor
+	Ptr<BackgroundSubtractor> bg_model;
+    bg_model 										= createBackgroundSubtractorMOG2(30, 16.0, false);
     Mat img, fgmask;
 	Mat grayForRect;
 	Rect bballRect;
 	vector< vector<Point> > boardContours;	
-	Scalar redColor 								= Scalar (0, 20, 180);
 	Scalar greenColor 								= Scalar (0, 215, 0);
-	Scalar blueColor 								= Scalar (180, 0, 0);
 	bool haveBackboard 								= false;
     vector<Rect> bodys;
 	String body_cascade_name 						= "/home/fred/Pictures/OrgTrack_res/cascadeconfigs/haarcascade_fullbody.xml";
 	CascadeClassifier body_cascade; 
+	Mat imgBBallGray;
 	Mat firstFrame;
 	bool semiCircleReady 							= false;
 	Rect offsetBackboard;
@@ -169,53 +167,55 @@ int main(int argc, const char** argv)
 			printf("--(!)Error loading body_cascade_name\n"); return -1; 
 		}
 
-		getGray(img,grayForRect);       									//Converts to a gray image.  All we need is a gray image for cv computing.
-		blur(grayForRect, grayForRect, Size(3,3));							//Blurs, i.e. smooths, an image using the normalized box filter.  Used to reduce noise.
-		equalizeHist(grayForRect, grayForRect);								//Equalizes the histogram of the input image.  Normalizes the brightness and increases the contrast of the image.
-		threshold(grayForRect,threshold_output,thresh,255, THRESH_BINARY);	//fixed-level thresholding.  Used here to produce a bi-level image.  Can also be used to remove noise.
-		findContours( threshold_output, boardContours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0, 0) );  //Finds contours in binary image. Contours are useful for shape analysis
-																														//and object detection & recognition.
+		getGray(img,grayForRect);
+		blur(grayForRect, grayForRect, Size(3,3));
+		equalizeHist(grayForRect, grayForRect);
+		threshold(grayForRect,threshold_output,thresh,255, THRESH_BINARY);
+		findContours( threshold_output, boardContours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0, 0) );
 
 		vector< vector<Point> > contours_poly( boardContours.size() );
 		vector<Rect> boundRect( boardContours.size() );
-		//vector<Point2f> center( boardContours.size() );
-		//vector<float> rradius( boardContours.size() );
+		vector<Point2f> center( boardContours.size() );
+		vector<float> rradius( boardContours.size() );
 
 		///*************************Start of main code to detect BackBoard*************************
-		for (int i = 0; i < boardContours.size(); i++ ) {
-			approxPolyDP(Mat(boardContours[i]),contours_poly[i],3,true);	//Finds all polygon shapes in the contour input. Used later to find rectangles, i.e. basketball backboard.
-			boundRect[i] = boundingRect(Mat(contours_poly[i]));				//Converting all the polygons found into rectangles. Below will be try to identify which one is the basketball backboard.
-			//minEnclosingCircle( (Mat) contours_poly[i], center[i], rradius[i] );
+		for ( size_t i = 0; i < boardContours.size(); i++ ) {
+			approxPolyDP(Mat(boardContours[i]),contours_poly[i],3,true);
+			boundRect[i] = boundingRect(Mat(contours_poly[i]));
+			minEnclosingCircle( (Mat) contours_poly[i], center[i], rradius[i] );
 		}
 		
 		double bb_ratio = 0.0;
 		double bb_w = 0.0;
 		double bb_h = 0.0;
+		double bb_area = 0.0;
+		int bb_x, bb_y;
 		///*************************End of main code to detect BackBoard*************************
 
 		///*******Start of main code to detect Basketball*************************
-        bg_model->apply(grayForRect, fgmask);											//Computes a foreground mask for the input video frame.
-		Canny(fgmask, fgmask, thresh, thresh*2, 3);    							//Finds edges in an image.  Going to use it to help identify and track the basketball.
-																				//Also used in the processing pipeline to identify the person(i.e. human body) shooting the ball.
+        bg_model->apply(img, fgmask);
+
+		Canny(fgmask, fgmask, thresh, thresh*2, 3);
 		
 		vector<vector<Point> > bballContours;
 		vector<Vec4i> hierarchy;
-		findContours(fgmask,bballContours,hierarchy,CV_RETR_TREE,CV_CHAIN_APPROX_SIMPLE, Point(0, 0) );		//Finds contours in foreground mask image.
+		findContours(fgmask,bballContours,hierarchy,CV_RETR_TREE,CV_CHAIN_APPROX_SIMPLE, Point(0, 0) );
 		
-		Mat imgBball = Mat::zeros(fgmask.size(),CV_8UC1);
+		Mat imgBball = Mat::zeros(fgmask.size(),CV_8UC3);
 		for (size_t i = 0; i < bballContours.size(); i++ )
 		{
 			Scalar color = Scalar( rng.uniform(0, 255), rng.uniform(0, 255), rng.uniform(0, 255) );
-			drawContours(imgBball,bballContours,i,color,2,8,hierarchy,0,Point());		//Draws contours onto output image, i.e. imgBball.
-																						//The goal here is the find and track the basketball inside of imgBball image frames.
+			drawContours(imgBball,bballContours,i,color,2,8,hierarchy,0,Point());
 		}
+
 
 		//------------Track the basketball!!!!---------------
         vector<Vec3f> basketballTracker;
+		getGray(imgBball, imgBBallGray);
 		float canny1 = 100;
         float canny2 = 14; //16;
-		double minDist = imgBball.rows/8; //4;
-		HoughCircles(imgBball, basketballTracker, CV_HOUGH_GRADIENT, 1, minDist, canny1, canny2, 1, 9 );
+		double minDist = imgBBallGray.rows/8; //4;
+		HoughCircles(imgBBallGray, basketballTracker, CV_HOUGH_GRADIENT, 1, minDist, canny1, canny2, 1, 9 );
 
 		if (basketballTracker.size() > 0)
 		{
@@ -228,6 +228,9 @@ int main(int argc, const char** argv)
 				int bballXtl = (int)(basketballTracker[i][0]-bballRadius);
 				int bballYtl = (int)(basketballTracker[i][1]-bballRadius);
 				bballRect = Rect(bballXtl, bballYtl, bballDiameter, bballDiameter);
+
+				//-------We chose what we think is the basketball and put it in basketballChoice!!!---------
+				Rect basketballChoice = bballRect;
 
 				for (size_t j = 0; j < boardContours.size(); j++) 
 				{
@@ -293,7 +296,12 @@ int main(int argc, const char** argv)
 					sleepDelay = 0;
 
 					//The basketball on video frames.
+					Scalar rngColor = Scalar( rng.uniform(0, 255), rng.uniform(0, 255), rng.uniform(0, 255) );
 					Rect objIntersect = freezeBB & bballRect;
+
+					//rectangle(img, basketballChoice.tl(), basketballChoice.br(), Scalar(0,180,255), 2, 8, 0 );
+					//rectangle(img, freezeBB.tl(), freezeBB.br(), Scalar(180,50,0), 2, 8, 0 );
+
 
 					//---Start of the process of identifying a shot at the basket!!!------------
 					if (objIntersect.area() > 0) {
@@ -746,22 +754,6 @@ int getPlayerOffsetY(int frame_count, float player_pos_x, float player_pos_y, in
 	}
 }
 
-vector<Rect> get_sliding_windows(Mat& image,int winWidth,int winHeight)
-{
-  vector<Rect> rects;
-  int step = 16;
-  for(int i=0;i<image.rows;i+=step)
-  {
-      if((i+winHeight)>image.rows){break;}
-      for(int j=0;j< image.cols;j+=step)    
-      {
-          if((j+winWidth)>image.cols){break;}
-          Rect rect(j,i,winWidth,winHeight);
-          rects.push_back(rect);
-      }
-  } 
-  return rects;
-}
 Mat drawSemiCircle(Mat& image, int radius, Point center) {
 	int temp1, temp2, temp3;
 	int yval;
