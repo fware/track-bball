@@ -39,7 +39,6 @@ double DistanceToCamera(double knownWidth, double focalLength, double perWidth);
 int getPlayerOffsetX(int frame_count, float player_pos_x, float player_pos_y, int player_hgt);
 int getPlayerOffsetY(int frame_count, float player_pos_x, float player_pos_y, int player_hgt);
 Mat drawSemiCircle(Mat& image, int radius, Point center);
-//float euclideanDist(Point& p, Point& q);
 double euclideanDist(double x1, double y1, double x2, double y2);
 double oneDDist(double p1, double p2);
 int findIndex_BSearch(const vector< int> &my_numbers, int key);
@@ -52,7 +51,6 @@ static void help()
 
 int main(int argc, const char** argv)
 {
-	//const string videofileName = argc >= 2 ? argv[1] : "v1.mp4";
 	const string videoIdx 							= argc >= 2 ? argv[1] : "1";
 	int fileNumber;
 	if ( argc > 1 ) {
@@ -67,7 +65,6 @@ int main(int argc, const char** argv)
 	const string videofileName 						= "/home/fred/Videos/testvideos/v" + vIdx + ".mp4";
     help();
 	int frameCount 									= 0;
-	int sleepDelay 									= 0;
 	const string bballPatternFile 					= "/home/fred/Pictures/OrgTrack_res/bball3_vga.jpg";
 	Mat patternImage 								= imread(bballPatternFile);
 	const string bballFileName 						= "/home/fred/Pictures/OrgTrack_res/bball-half-court-vga.jpeg";
@@ -80,10 +77,9 @@ int main(int argc, const char** argv)
 	int newPlayerWindowSize 						= 50;
 	PlayerObs newPlayerWindow[newPlayerWindowSize];  
 	vector <int> hTableRange;
-	Point hgtRings[newPlayerWindowSize][1200 /*562*/];
+	Point hgtRings[newPlayerWindowSize][1200];
 	Mat threshold_output;
 	vector<Vec4i> hierarchy;
-//    namedWindow("image", WINDOW_NORMAL);
 	namedWindow("halfcourt", WINDOW_NORMAL);
 
 	Ptr<BackgroundSubtractor> bg_model;
@@ -121,16 +117,6 @@ int main(int argc, const char** argv)
     }
 
 
-#ifdef IMG_DEBUG
-	int l_bound1=260; int r_bound1=305;
-	int l_bound2=600; int r_bound2=700;
-	int l_bound3=700; int r_bound3=800;
-	int l_bound4=1000; int r_bound4=1300;
-	int l_bound5=1300; int r_bound5=1400;
-	int l_bound6=1400; int r_bound6=1500;
-	int l_bound7=1500; int r_bound7=1600;
-#endif
-
 	cap >> firstFrame;
 	if (firstFrame.empty())
 	{
@@ -157,7 +143,6 @@ int main(int argc, const char** argv)
     {
         cap >> img;
 		frameCount++;
-		sleepDelay = 0;
 		
         if( img.empty() )
             break;
@@ -175,25 +160,20 @@ int main(int argc, const char** argv)
 
 		vector< vector<Point> > contours_poly( boardContours.size() );
 		vector<Rect> boundRect( boardContours.size() );
-		vector<Point2f> center( boardContours.size() );
-		vector<float> rradius( boardContours.size() );
 
 		///*************************Start of main code to detect BackBoard*************************
 		for ( size_t i = 0; i < boardContours.size(); i++ ) {
 			approxPolyDP(Mat(boardContours[i]),contours_poly[i],3,true);
 			boundRect[i] = boundingRect(Mat(contours_poly[i]));
-			minEnclosingCircle( (Mat) contours_poly[i], center[i], rradius[i] );
 		}
 		
 		double bb_ratio = 0.0;
 		double bb_w = 0.0;
 		double bb_h = 0.0;
-		double bb_area = 0.0;
-		int bb_x, bb_y;
 		///*************************End of main code to detect BackBoard*************************
 
 		///*******Start of main code to detect Basketball*************************
-        bg_model->apply(img, fgmask);
+        bg_model->apply(grayForRect, fgmask);
 
 		Canny(fgmask, fgmask, thresh, thresh*2, 3);
 		
@@ -201,7 +181,7 @@ int main(int argc, const char** argv)
 		vector<Vec4i> hierarchy;
 		findContours(fgmask,bballContours,hierarchy,CV_RETR_TREE,CV_CHAIN_APPROX_SIMPLE, Point(0, 0) );
 		
-		Mat imgBball = Mat::zeros(fgmask.size(),CV_8UC3);
+		Mat imgBball = Mat::zeros(fgmask.size(),CV_8UC1);
 		for (size_t i = 0; i < bballContours.size(); i++ )
 		{
 			Scalar color = Scalar( rng.uniform(0, 255), rng.uniform(0, 255), rng.uniform(0, 255) );
@@ -286,11 +266,10 @@ int main(int argc, const char** argv)
 					//**** End of selection of backboard rectangle
 				}
 
-				if ((bballRect.x > leftImgBoundary /*img.cols/4*/) 
-								&& (bballRect.x < rightImgBoundary /*img.cols * 3 / 4*/)
-								&& (bballRect.y > topImgBoundary /*img.rows/4*/)
-								&& (bballRect.y < bottomImgBoundary /*img.rows * 3 / 4*/)) {
-					sleepDelay = 0;
+				if ( (bballRect.x > leftImgBoundary)
+								&& (bballRect.x < rightImgBoundary)
+								&& (bballRect.y > topImgBoundary)
+								&& (bballRect.y < bottomImgBoundary) ) {
 
 					//The basketball on video frames.
 					Scalar rngColor = Scalar( rng.uniform(0, 255), rng.uniform(0, 255), rng.uniform(0, 255) );
@@ -325,42 +304,18 @@ int main(int argc, const char** argv)
 							playerPositAvg = newPlayerWindow[newPlayerWindowSize-1].position;
 							playerHeightIndex = newPlayerWindow[newPlayerWindowSize-1].radiusIdx;
 							playerPlacement = newPlayerWindow[newPlayerWindowSize-1].placement;
-							cout << "newPlayerWindow[0].frameCount=" << newPlayerWindow[0].frameCount
-							     << "newPlayerWindow[0].position=" << newPlayerWindow[0].position
-								 << "   newPlayerWindow[0].radiusIdx=" << newPlayerWindow[0].radiusIdx
-								 << "   newPlayerWindow[0].placement=" << newPlayerWindow[0].placement
-								 << endl;
 						}
 
-						//circle(img, bballCenter, 3, Scalar(0,255,255), -1);
 						if (frameCount > 220) 
 						{
-							//if ((frameCount - newPlayerWindow[0].frameCount) < 75) 
-							//{
-								//if ((playerPositAvg.x == 0) || (playerPositAvg.y == 0))
 								if ((newPlayerWindow[0].position.x == 0) || (newPlayerWindow[0].position.y == 0))
 								{
-									cout << "newPlayerWindow[0].frameCount=" << newPlayerWindow[0].frameCount
-										 << "	 freezeCenter="		   		<< Point(freezeCenterX,freezeCenterY)
-										 << "	 Chosen  newPlayerWindow[0].position="	<<	newPlayerWindow[0].position
-										 << "	 hgtRings["					<< newPlayerWindow[0].radiusIdx
-										 << "][" 							<< newPlayerWindow[0].placement
-										 << "]=" 							<< hgtRings[newPlayerWindow[0].radiusIdx][newPlayerWindow[0].placement]
-										 << endl;
 									circle(bbsrc, hgtRings[newPlayerWindow[0].radiusIdx][newPlayerWindow[0].placement], 1, Scalar(0, 165, 255), 3); 
 								}
 								else
 								{
-									cout << frameCount << ":"
-										 << "	 freezeCenter="		   		<< Point(freezeCenterX,freezeCenterY)
-										 << "	 Chosen  newPlayerWindow[0].position="	<< newPlayerWindow[0].position
-										 << "	 hgtRings["					<< newPlayerWindow[0].radiusIdx
-										 << "]["							<< newPlayerWindow[0].placement
-										 << "]="							<< hgtRings[newPlayerWindow[0].radiusIdx][newPlayerWindow[0].placement]
-										 << endl;
 									circle(bbsrc, hgtRings[newPlayerWindow[0].radiusIdx][newPlayerWindow[0].placement], 1, Scalar(0, 165, 255), 3);
 								}
-							//}
 						}
 
 						Point semiCircleCenterPt( (offsetBackboard.tl().x+offsetBackboard.width/2) , (offsetBackboard.tl().y + offsetBackboard.height/2) );
@@ -383,16 +338,12 @@ int main(int argc, const char** argv)
 									yval += bbCenterPosit.y;
 									Point ptTemp = Point(x, yval);
 									hgtRings[bCounter][x] = ptTemp;
-									//cout << "hgtRings[" << bCounter << "][" << x << "]=" << ptTemp << endl;
-									//circle(bbsrc, ptTemp, 1, Scalar(0,255,0), -1);			
 								}
 								
 								bCounter++;
 							}
 							semiCircleReady = true;
 						}
-						//circle(bbsrc, semiCircleCenterPt, 1, Scalar(180, 50, 230), 3);
-						//rectangle(bbsrc, offsetBackboard.tl(), offsetBackboard.br(), blueColor, 2, 8, 0 );
 					}
 					//---Start of using player position on halfcourt image to draw shot location-----
 					//---End of the process of identifying a shot at the basket!!!------------
@@ -407,169 +358,73 @@ int main(int argc, const char** argv)
 
 		stringstream ss;
 		ss << frameCount;
-		stringstream bodyheight;
-		stringstream bodycenterX;
-		stringstream bodycenterY;
-		string posit_on_video;
-		string bb_initial_inputs;
-		string posit_on_chart;
-		stringstream playerXStr;
-		stringstream playerYStr;
 
-/*
-		if (bodys.size() == 0) 
+		for( int j = 0; j < bodys.size(); j++ )
 		{
-			//Do nothing
-			for (int k = newPlayerWindowSize; k > 1; k--) 
-			{
+			//-----------Identifying player height and position!!--------------
+			Point bodyCenter( bodys[j].x + bodys[j].width*0.5, bodys[j].y + bodys[j].height*0.5 );
+
+			//--- Start of adjusting player position on image of half court!!!-----
+			//Sliding window for finding the average position of the player.
+			for (int k = newPlayerWindowSize; k > 1; k--) {
 				newPlayerWindow[k-1].activeValue = newPlayerWindow[k-2].activeValue;
 				newPlayerWindow[k-1].radiusIdx = newPlayerWindow[k-2].radiusIdx;
 				newPlayerWindow[k-1].placement = newPlayerWindow[k-2].placement;
 				newPlayerWindow[k-1].position = newPlayerWindow[k-2].position;
 				newPlayerWindow[k-1].frameCount = newPlayerWindow[k-2].frameCount;
 			}
-			newPlayerWindow[0].activeValue = 0;
-			newPlayerWindow[0].radiusIdx = 0;
-			newPlayerWindow[0].placement = 0;
-			newPlayerWindow[0].position = Point(0,0);
 			newPlayerWindow[0].frameCount = frameCount;
+			newPlayerWindow[0].activeValue = 1;
+			newPlayerWindow[0].position = bodyCenter; //playerNewPosit;
+
+			double distFromBB = euclideanDist((double) freezeCenterX,(double) freezeCenterY,(double) bodyCenter.x, (double) bodyCenter.y);
+			double xDistFromBB = oneDDist(freezeCenterX, bodyCenter.x);
+			double yDistFromBB = oneDDist(freezeCenterY, bodyCenter.y);
+
+			if (distFromBB > 135)
+			{
+				newPlayerWindow[0].radiusIdx = hTableRange.size() * 0.99;
+
+				distFromBB += 120;
+
+				int tempPlacement = (bbCenterPosit.x + hTableRange[newPlayerWindow[0].radiusIdx])
+								- (bbCenterPosit.x - hTableRange[newPlayerWindow[0].radiusIdx]);
+
+				if (bodyCenter.x > freezeCenterX) tempPlacement -= 1;
+				else tempPlacement = 0;
+				tempPlacement += (bbCenterPosit.x - hTableRange[newPlayerWindow[0].radiusIdx]);
+
+				newPlayerWindow[0].placement = tempPlacement;
+			}
+			else if (distFromBB < 30)
+			{
+				int tempPlacement;
+				if (bodyCenter.x < freezeCenterX) tempPlacement = 0;
+				else tempPlacement = (bbCenterPosit.x + hTableRange[newPlayerWindow[0].radiusIdx])
+								- (bbCenterPosit.x - hTableRange[newPlayerWindow[0].radiusIdx]) - 1;
+
+				newPlayerWindow[0].placement = tempPlacement;
+				newPlayerWindow[0].radiusIdx = hTableRange.size() * 0.01;
+			}
+			else
+			{
+				if (bodys[j].height < 170)    //NOTE:  If not true, then we have inaccurate calculation of body height from detectMultiscale method.  Do not estimate a player position for it.
+				{
+					newPlayerWindow[0].radiusIdx = findIndex_BSearch(hTableRange, distFromBB);
+					newPlayerWindow[0].radiusIdx += 5;
+					if ((xDistFromBB < 51) && (yDistFromBB < 70)) newPlayerWindow[0].radiusIdx = 0;
+					
+					double percentPlacement = (double) (bodyCenter.x - leftImgBoundary) / (rightImgBoundary - leftImgBoundary);
+					int leftRingBound		= bbCenterPosit.x - hTableRange[newPlayerWindow[0].radiusIdx];
+					int rightRingBound		= bbCenterPosit.x + hTableRange[newPlayerWindow[0].radiusIdx];
+					int chartPlacementTemp	= (rightRingBound - leftRingBound) * percentPlacement;
+					int chartPlacement		= leftRingBound + chartPlacementTemp;
+
+					newPlayerWindow[0].placement = chartPlacement;
+				}
+			}
+			//--- End of adjusting player position on image of half court!!!-----
 		}
-		else 
-		{
-*/		
-		    for( int j = 0; j < bodys.size(); j++ )
-	        {
-	        	//-----------Identifying player height and position!!--------------
-				Point bodyCenter( bodys[j].x + bodys[j].width*0.5, bodys[j].y + bodys[j].height*0.5 ); 
-				
-				//--- Start of adjusting player position on image of half court!!!-----
-				// NOTE:  If player height is greater that 135 just skip the calculations and adjustments for this particular frame.  It is too out of scope.
-				//if (bodys[j].height <= 135) 
-				//{
-					
-
-					//Sliding window for finding the average position of the player.
-					for (int k = newPlayerWindowSize; k > 1; k--) {
-						newPlayerWindow[k-1].activeValue = newPlayerWindow[k-2].activeValue;
-						newPlayerWindow[k-1].radiusIdx = newPlayerWindow[k-2].radiusIdx;
-						newPlayerWindow[k-1].placement = newPlayerWindow[k-2].placement;
-						newPlayerWindow[k-1].position = newPlayerWindow[k-2].position;
-						newPlayerWindow[k-1].frameCount = newPlayerWindow[k-2].frameCount;
-					}
-					newPlayerWindow[0].frameCount = frameCount;
-					newPlayerWindow[0].activeValue = 1;
-					newPlayerWindow[0].position = bodyCenter; //playerNewPosit;
-					
-
-					double distFromBB = euclideanDist((double) freezeCenterX,(double) freezeCenterY,(double) bodyCenter.x, (double) bodyCenter.y);
-					double xDistFromBB = oneDDist(freezeCenterX, bodyCenter.x);
-					double yDistFromBB = oneDDist(freezeCenterY, bodyCenter.y);
-
-#ifdef SHOT_DEBUG 
-					cout << "   frameCount=" 		<< frameCount
-						 << "   freezeCenter="	    << Point(freezeCenterX, freezeCenterY)
-						 << "   bodyCenter=" 		<< bodyCenter
-					 	 << "   bodys[j].height="   << bodys[j].height 
-						 << "   distFromBB=" 		<< distFromBB
-						 << "   xDistFromBB="		<< xDistFromBB
-						 << "   yDistFromBB="		<< yDistFromBB
-						 << endl;
-#endif
-
-					if (distFromBB > 135) 
-					{
-						newPlayerWindow[0].radiusIdx = hTableRange.size() * 0.99;
-
-						distFromBB += 120;
-
-						cout << "frameCount="										<< frameCount
-							 << "    bbCenterPosit.x="								<< bbCenterPosit.x
-							 << "    hTableRange[newPlayerWindow[0].radiusIdx]="	<< hTableRange[newPlayerWindow[0].radiusIdx]
-							 << endl;
-
-						int tempPlacement = (bbCenterPosit.x + hTableRange[newPlayerWindow[0].radiusIdx])
-										- (bbCenterPosit.x - hTableRange[newPlayerWindow[0].radiusIdx]);
-						
-						if (bodyCenter.x > freezeCenterX) tempPlacement -= 1;
-						else tempPlacement = 0;
-						tempPlacement += (bbCenterPosit.x - hTableRange[newPlayerWindow[0].radiusIdx]);
-
-						newPlayerWindow[0].placement = tempPlacement;
-					}
-					else if (distFromBB < 30) 
-					{
-						int tempPlacement;
-						if (bodyCenter.x < freezeCenterX) tempPlacement = 0;
-					    else tempPlacement = (bbCenterPosit.x + hTableRange[newPlayerWindow[0].radiusIdx])
-										- (bbCenterPosit.x - hTableRange[newPlayerWindow[0].radiusIdx]) - 1;
-						
-						newPlayerWindow[0].placement = tempPlacement;
-						newPlayerWindow[0].radiusIdx = hTableRange.size() * 0.01;
-					}
-					else 
-					{
-					    if (bodys[j].height < 170)    //NOTE:  If not true, then we have inaccurate calculation of body height from detectMultiscale method.  Do not estimate a player position for it. 
-						{
-							newPlayerWindow[0].radiusIdx = findIndex_BSearch(hTableRange, distFromBB /*bodys[j].height*/ /*hgtAdjustment*/);
-							newPlayerWindow[0].radiusIdx += 5;
-							if ((xDistFromBB < 51) && (yDistFromBB < 70)) newPlayerWindow[0].radiusIdx = 0;
-							cout << "frameCount="	<< frameCount
-								 << "	 radiusIdx=" << newPlayerWindow[0].radiusIdx
-								 << endl;
-							
-							double percentPlacement = (double) (bodyCenter.x - leftImgBoundary) / (rightImgBoundary - leftImgBoundary);
-							int leftRingBound		= bbCenterPosit.x - hTableRange[newPlayerWindow[0].radiusIdx];
-							int rightRingBound		= bbCenterPosit.x + hTableRange[newPlayerWindow[0].radiusIdx];
-							int chartPlacementTemp	= (rightRingBound - leftRingBound) * percentPlacement;
-							int chartPlacement		= leftRingBound + chartPlacementTemp;
-
-							newPlayerWindow[0].placement = chartPlacement;
-						}
-					}
-					//newPlayerWindow[0].frameCount = frameCount;    NOTE:  This wrong place to save the correct frame number.  Should always record it in conjunction with position.
-					
-					//--- End of adjusting player position on image of half court!!!-----
-
-#ifdef IMG_DEBUG				
-					posit_on_video = "video v" + vIdx + "  frame" + ss.str() + "  body height:" + bodyheight.str() + " body center(" + bodycenterX.str() + "," + bodycenterY.str() + ")";
-					posit_on_chart = "chart v" + vIdx + "  frame" + ss.str() + "  playerPosit(" + playerXStr.str() + "," + playerYStr.str() + ")  for body height=" + bodyheight.str();
-					if (frameCount > l_bound1 && frameCount < r_bound1) {
-						printf("%d:playerBodyCenter(%f, %f)   playerNewPosit=(%d, %d)\n", frameCount, playerBodyCenterX, playerBodyCenterY, playerNewPosit.x, playerNewPosit.y);
-						circle(bbsrc, playerNewPosit, 1, redColor, -1);
-						showAndSave( posit_on_chart, bbsrc);
-					}
-					else if (frameCount > l_bound2 && frameCount < r_bound2) {
-						printf("%d:playerNewPosit=(%d, %d)\n", frameCount, playerNewPosit.x, playerNewPosit.y);
-						circle(bbsrc, playerNewPosit, 1, greenColor, -1);
-						showAndSave( posit_on_chart, bbsrc);
-					}
-					else if (frameCount > l_bound3 && frameCount < r_bound3) {
-						printf("%d:playerNewPosit=(%d, %d)\n", frameCount, playerNewPosit.x, playerNewPosit.y);
-						circle(bbsrc, playerNewPosit, 1, blueColor, -1);
-						showAndSave( posit_on_chart, bbsrc);
-					}
-					else if (frameCount > l_bound4 && frameCount < r_bound4) {
-						printf("%d:playerNewPosit=(%d, %d)\n", frameCount, playerNewPosit.x, playerNewPosit.y);
-						circle(bbsrc, playerNewPosit, 1, blueColor, -1);
-						showAndSave( posit_on_chart, bbsrc);
-					}
-					else if (frameCount > l_bound5 && frameCount < r_bound5) {
-						printf("%d:playerNewPosit=(%d, %d)\n", frameCount, playerNewPosit.x, playerNewPosit.y);
-						circle(bbsrc, playerNewPosit, 1, blueColor, -1);
-						showAndSave( posit_on_chart, bbsrc);
-					}
-					else if (frameCount > l_bound6 && frameCount < r_bound6) {
-						printf("%d:playerNewPosit=(%d, %d)\n", frameCount, playerNewPosit.x, playerNewPosit.y);
-						circle(bbsrc, playerNewPosit, 1, blueColor, -1);
-						showAndSave( posit_on_chart, bbsrc);
-					}		
-#endif
-
-					//ellipse( img, bodyCenter, Size( bodys[j].width*0.5, bodys[j].height*0.5), 0, 0, 360, Scalar( 255, 0, 255 ), 4, 8, 0 );
-				//}
-	        } 
-//		}// end else
-		
 
 		//Create string of frame counter to display on video window.
 		string str = "frame" + ss.str();		
@@ -583,29 +438,10 @@ int main(int argc, const char** argv)
 		imshow("halfcourt", finalImg); //bbsrc);
         //imshow("image", img);
 
-#ifdef IMG_DEBUG
-		if (frameCount > l_bound1 && frameCount < r_bound1) 
-			showAndSave( posit_on_video, img);
-		else if (frameCount > l_bound2 && frameCount < r_bound2) 
-			showAndSave( posit_on_video, img);
-		else if (frameCount > l_bound3 && frameCount < r_bound3) 
-			showAndSave( posit_on_video, img);
-		else if (frameCount > l_bound4 && frameCount < r_bound4) 
-			showAndSave( posit_on_video, img);
-		else if (frameCount > l_bound5 && frameCount < r_bound5) 
-			showAndSave( posit_on_video, img);
-		else if (frameCount > l_bound6 && frameCount < r_bound6) 
-			showAndSave( posit_on_video, img);
-#endif
-			
-		sleep(sleepDelay);
-
         char k = (char)waitKey(30);
         if( k == 27 ) break;
 
 		outputVideo << finalImg;
-
-		//if (frameCount == 2000) break;    //NOTE:  Break out of loop early.
     }
 
     return 0;
@@ -751,13 +587,6 @@ Mat drawSemiCircle(Mat& image, int radius, Point center) {
 	}
 	return image;
 }
-
-/*
-float euclideanDist(Point& p, Point& q) {
-    Point diff = p - q;
-    return cv::sqrt(diff.x*diff.x + diff.y*diff.y);
-}
-*/
 
 double euclideanDist(double x1, double y1, double x2, double y2)
 {
