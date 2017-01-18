@@ -271,10 +271,14 @@ int main(int argc, const char** argv)
 				if ( (ballRect.x > leftActiveBoundary)
 								&& (ballRect.x < rightActiveBoundary)
 								&& (ballRect.y > topActiveBoundary)
-								&& (ballRect.y < bottomActiveBoundary) ) {
+								&& (ballRect.y < bottomActiveBoundary) )
+				{
 
 					//The basketball on video frames.
 					Scalar rngColor = Scalar( rng.uniform(0, 255), rng.uniform(0, 255), rng.uniform(0, 255) );
+
+
+					rectangle(img, ballRect.tl(), ballRect.br(), Scalar(60,180,255), 2, 8, 0 );
 					Rect objIntersect = Backboard & ballRect;
 
 					//---Start of the process of identifying a shot at the basket!!!------------
@@ -283,6 +287,7 @@ int main(int argc, const char** argv)
 						//---Start of using player position on halfcourt image to draw shot location-----
 						if (frameCount > 220) 
 						{
+							cout << newPlayerWindow.radiusIdx << " " << newPlayerWindow.placement << endl;
 							circle(bbsrc, courtArc[newPlayerWindow.radiusIdx][newPlayerWindow.placement], 1, Scalar(0, 165, 255), 3);
 						}
 
