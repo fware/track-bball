@@ -53,6 +53,9 @@ int main(int argc, const char** argv)
 {
 	const string videoIdx 							= argc >= 2 ? argv[1] : "1";
 	int fileNumber;
+	string videofileName;
+	bool sizeFlag = false;
+
 	if ( argc > 1 ) {
 		fileNumber = atoi( argv[1] );
 	}
@@ -62,7 +65,15 @@ int main(int argc, const char** argv)
 	stringstream vSS;
 	vSS << fileNumber;
     string vIdx 									= vSS.str();
-	const string videofileName 						= "/home/fred/Videos/testvideos/v" + vIdx + ".mp4";
+	if ( fileNumber <= 5 )
+	{
+		videofileName 						= "/home/fred/Videos/testvideos/v" + vIdx + ".mp4";
+	}
+	else if ( fileNumber > 6 )
+	{
+		videofileName 						= "/home/fred/Videos/testvideos/v" + vIdx + ".MOV";
+	}
+
     help();
 	int frameCount 									= 0;
 	const string bballPatternFile 					= "/home/fred/Pictures/OrgTrack_res/bball3_vga.jpg";
@@ -124,12 +135,20 @@ int main(int argc, const char** argv)
         return -1;
 	}
 
-    int ex = static_cast<int>(cap.get(CV_CAP_PROP_FOURCC));     // Get Codec Type- Int form
+    //int ex = static_cast<int>(cap.get(CV_CAP_PROP_FOURCC));     // Get Codec Type- Int form
     Size S = Size((int) cap.get(CV_CAP_PROP_FRAME_WIDTH),    // Acquire input size
                   (int) cap.get(CV_CAP_PROP_FRAME_HEIGHT));
+
+	if (S.width > 640)
+	{
+		sizeFlag = true;
+		S = Size (640, 480);
+		resize(firstFrame, firstFrame, S);
+	}
+
 	Size outS = Size ((int) 2 * S.width, S.height);
-	VideoWriter outputVideo; 
-	outputVideo.open(OUTNAME, ex, cap.get(CV_CAP_PROP_FPS), outS, true);
+	//VideoWriter outputVideo;
+	//outputVideo.open(OUTNAME, ex, cap.get(CV_CAP_PROP_FPS), outS, true);
 	Mat finalImg(S.height, S.width+S.width, CV_8UC3);
 
 	leftActiveBoundary 			= firstFrame.cols/4;  
@@ -142,6 +161,10 @@ int main(int argc, const char** argv)
     for(;;)
     {
         cap >> img;
+		if (sizeFlag) {
+			resize(img, img, S);
+		}
+
 		frameCount++;
 		
         if( img.empty() )
@@ -167,6 +190,7 @@ int main(int argc, const char** argv)
 			approxPolyDP(Mat(boardContours[i]),contours_poly[i],3,true);	//Finds all polygon shapes in the contour input. Used later to find rectangles, i.e. basketball backboard.
 			boundRect[i] = boundingRect(Mat(contours_poly[i]));				//Converting all the polygons found into rectangles.
 																			//Below will be try to identify which one is the basketball backboard.
+			rectangle(img, boundRect[i].tl(), boundRect[i].br(), Scalar(0,180,0), 2, 8, 0 );
 		}
 		
 		double bb_ratio = 0.0;
@@ -198,7 +222,6 @@ int main(int argc, const char** argv)
 		double minDist = imgBball.rows/8; //4;
 		HoughCircles(imgBball, basketballTracker, CV_HOUGH_GRADIENT, 1, minDist, canny1, canny2, 1, 9 );	//Finds circles in input image. (imgBball)
 																											//Writes output to output array (basketballTracker)
-
 		if (basketballTracker.size() > 0)
 		{
 			for (size_t i = 0; i < basketballTracker.size(); i++)
@@ -273,7 +296,6 @@ int main(int argc, const char** argv)
 								&& (ballRect.y > topActiveBoundary)
 								&& (ballRect.y < bottomActiveBoundary) )
 				{
-
 					//The basketball on video frames.
 					Scalar rngColor = Scalar( rng.uniform(0, 255), rng.uniform(0, 255), rng.uniform(0, 255) );
 
@@ -320,7 +342,6 @@ int main(int argc, const char** argv)
 					}
 					//---Start of using player position on halfcourt image to draw shot location-----
 					//---End of the process of identifying a shot at the basket!!!------------
-					
 				}				
 			}
 			///*******End of code to detect & select Basketball*************************
@@ -352,17 +373,27 @@ int main(int argc, const char** argv)
 
 				distFromBB += 120;
 
-				int tempPlacement = (bbCenterPosit.x + radiusArray[newPlayerWindow.radiusIdx])
+				int tempPlacement = 0;
+
+				if (radiusArray.size() == 0)
+					tempPlacement = bbCenterPosit.x - bbCenterPosit.x;
+				else
+					tempPlacement = (bbCenterPosit.x + radiusArray[newPlayerWindow.radiusIdx])
 								- (bbCenterPosit.x - radiusArray[newPlayerWindow.radiusIdx]);
 
-				if (bodyCenter.x > BackboardCenterX) tempPlacement -= 1;
-				else tempPlacement = 0;
-				tempPlacement += (bbCenterPosit.x - radiusArray[newPlayerWindow.radiusIdx]);
+				if (bodyCenter.x > BackboardCenterX)
+					tempPlacement -= 1;
+				else
+					tempPlacement = 0;
+
+				if (tempPlacement > 0)
+					tempPlacement += (bbCenterPosit.x - radiusArray[newPlayerWindow.radiusIdx]);
 
 				newPlayerWindow.placement = tempPlacement;
 			}
 			else if (distFromBB < 30)
 			{
+				cout << "Bug 13" << endl;
 				int tempPlacement;
 				if (bodyCenter.x < BackboardCenterX) tempPlacement = 0;
 				else tempPlacement = (bbCenterPosit.x + radiusArray[newPlayerWindow.radiusIdx])
@@ -370,9 +401,11 @@ int main(int argc, const char** argv)
 
 				newPlayerWindow.placement = tempPlacement;
 				newPlayerWindow.radiusIdx = radiusArray.size() * 0.01;
+				cout << "Bug 14" << endl;
 			}
 			else
 			{
+				cout << "Bug 15" << endl;
 				if (bodys[j].height < 170)    //NOTE:  If not true, then we have inaccurate calculation of body height from detectMultiscale method.  Do not estimate a player position for it.
 				{
 					newPlayerWindow.radiusIdx = findIndex_BSearch(radiusArray, distFromBB);
@@ -386,10 +419,12 @@ int main(int argc, const char** argv)
 					int chartPlacement		= leftRingBound + chartPlacementTemp;
 
 					newPlayerWindow.placement = chartPlacement;
+					cout << "Bug 16" << endl;
 				}
 			}
 			//--- End of adjusting player position on image of half court!!!-----
 		}
+		cout << "Bug 17" << endl;
 
 		//Create string of frame counter to display on video window.
 		string str = "frame" + ss.str();		
@@ -399,14 +434,18 @@ int main(int argc, const char** argv)
 		img.copyTo(left);
 		Mat right(finalImg, Rect(bbsrc.cols, 0, bbsrc.cols, bbsrc.rows));
 		bbsrc.copyTo(right);		
+		cout << "Bug 18" << endl;
 
 		imshow("halfcourt", finalImg); //bbsrc);
         //imshow("image", img);
+		cout << "Bug 19" << endl;
 
         char k = (char)waitKey(30);
         if( k == 27 ) break;
+		cout << "Bug 20" << endl;
 
-		outputVideo << finalImg;
+		//outputVideo << finalImg;
+		cout << "Bug 21" << endl;
     }
 
     return 0;
