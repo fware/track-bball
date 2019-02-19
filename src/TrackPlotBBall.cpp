@@ -54,6 +54,9 @@ int main(int argc, const char** argv)
 	const string videoIdx 							= argc >= 2 ? argv[1] : "1";
 	int fileNumber;
 	string videofileName;
+
+	bool sizeFlag = false;
+
 	if ( argc > 1 ) {
 		fileNumber = atoi( argv[1] );
 	}
@@ -122,7 +125,6 @@ int main(int argc, const char** argv)
 	int topBBRegionLimit;
 	int bottomBBRegionLimit;
 	Point mostRecentPosition;
-	bool sizeFlag = false;
 	const string OUTNAME = "v4_output_longversion.mp4";	
 
     if( !cap.isOpened() )
@@ -479,14 +481,18 @@ int main(int argc, const char** argv)
 		img.copyTo(left);
 		Mat right(finalImg, Rect(bbsrc.cols, 0, bbsrc.cols, bbsrc.rows));
 		bbsrc.copyTo(right);		
+		cout << "Bug 18" << endl;
 
 		imshow("halfcourt", finalImg); //bbsrc);
         //imshow("image", img);
+		cout << "Bug 19" << endl;
 
         char k = (char)waitKey(30);
         if( k == 27 ) break;
+		cout << "Bug 20" << endl;
 
-		outputVideo << finalImg;
+		//outputVideo << finalImg;
+		cout << "Bug 21" << endl;
     }
 
     return 0;
