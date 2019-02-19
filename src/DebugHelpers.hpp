@@ -39,7 +39,7 @@ namespace cv
     {
         cv::Mat outImg;
 
-        if (matches.size() > maxMatchesDrawn)
+        if (matches.size() > (unsigned int) maxMatchesDrawn)
         {
             matches.resize(maxMatchesDrawn);
         }
