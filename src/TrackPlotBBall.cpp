@@ -1,3 +1,5 @@
+#include "opencv2/dnn.hpp"
+#include "opencv2/dnn/shape_utils.hpp"
 #include "opencv2/core/core.hpp"
 #include "opencv2/imgproc/imgproc.hpp"
 #include "opencv2/video/background_segm.hpp"
@@ -8,6 +10,7 @@
 //#include <opencv2/legacy/compat.hpp>
 #include <unistd.h>
 #include <stdio.h>
+#include <fstream>
 #include <iostream>
 #include <vector>
 #include <algorithm>
@@ -18,6 +21,7 @@
 
 using namespace std;
 using namespace cv;
+using namespace cv::dnn;
 
 class PlayerObs {
 	public:
@@ -108,6 +112,8 @@ int main(int argc, const char** argv)
 	bool haveBackboard 								= false;
     vector<Rect> bodys;
 	String body_cascade_name 						= "/home/fred/Pictures/OrgTrack_res/cascadeconfigs/haarcascade_fullbody.xml";
+	String modelBinary								= "/home/fred/Dev/DNN_models/MadeShots/V1/made_8200.weights";
+	String modelConfig								= "/home/fred/Dev/DNN_models/MadeShots/V1/made.cfg";
 	CascadeClassifier body_cascade; 
 	Mat firstFrame;
 	bool semiCircleReady 							= false;
@@ -133,6 +139,21 @@ int main(int argc, const char** argv)
 		printf("--(!)Error loading body_cascade_name\n"); return -1;
 	}
 
+	dnn::Net net = readNetFromDarknet(modelConfig, modelBinary);
+	if (net.empty())
+	{
+		cout << "dnn model is empty." << endl;
+		return -1;
+	}
+
+    vector<string> classNamesVec;
+    ifstream classNamesFile("/home/fred/Dev/DNN_models/MadeShots/V1/made.names");
+    if (classNamesFile.is_open())
+    {
+        string className = "";
+        while (std::getline(classNamesFile, className))
+            classNamesVec.push_back(className);
+    }
 
     if( !cap.isOpened() )
     {
@@ -288,8 +309,6 @@ int main(int argc, const char** argv)
 	    		semiCircleReady = true;
 	    	}
 
-
-
 			getGray(img,grayImage);											//Converts to a gray image.  All we need is a gray image for cv computing.
 			blur(grayImage, grayImage, Size(3,3));							//Blurs, i.e. smooths, an image using the normalized box filter.  Used to reduce noise.
 			bg_model->apply(grayImage, fgmask);				//Computes a foreground mask for the input video frame.
@@ -339,6 +358,79 @@ int main(int argc, const char** argv)
 
 						//---Start of the process of identifying a shot at the basket!!!------------
 						if (objIntersect.area() > 0) {
+
+							//Predict is a made shot
+							Mat basketRoI = img(Backboard).clone();
+				            //resize(basketRoI, basketRoI, Size(416,416));
+
+				            //! [Prepare blob]
+				            Mat inputBlob = blobFromImage(basketRoI, 1 / 255.F, Size(416, 416), Scalar(), true, false); //Convert Mat to batch of images
+				            //! [Prepare blob]
+
+				            //! [Set input blob]
+				            net.setInput(inputBlob, "data");                   //set the network input
+				            //! [Set input blob]
+
+				            //! [Make forward pass]
+				            Mat detectionMat = net.forward("detection_out");   //compute output
+
+				            for (int i = 0; i < detectionMat.rows; i++)
+				            {
+				                const int probability_index = 5;
+				                const int probability_size = detectionMat.cols - probability_index;
+				                float *prob_array_ptr = &detectionMat.at<float>(i, probability_index);
+
+				                size_t objectClass = max_element(prob_array_ptr, prob_array_ptr + probability_size) - prob_array_ptr;
+				                float confidence = detectionMat.at<float>(i, (int)objectClass + probability_index);
+
+				                if (confidence > 0.24)
+				                {
+				                    float x = detectionMat.at<float>(i, 0);
+				                    float y = detectionMat.at<float>(i, 1);
+				                    float width = detectionMat.at<float>(i, 2);
+				                    float height = detectionMat.at<float>(i, 3);
+				                    int xLeftBottom = static_cast<int>((x - width / 2) * basketRoI.cols);
+				                    int yLeftBottom = static_cast<int>((y - height / 2) * basketRoI.rows);
+				                    int xRightTop = static_cast<int>((x + width / 2) * basketRoI.cols);
+				                    int yRightTop = static_cast<int>((y + height / 2) * basketRoI.rows);
+
+				                    Rect object(xLeftBottom, yLeftBottom,
+				                                xRightTop - xLeftBottom,
+				                                yRightTop - yLeftBottom);
+
+				                    rectangle(basketRoI, object, Scalar(0, 255, 0));
+
+				                    if (objectClass < classNamesVec.size())
+				                    {
+				                        ss.str("");
+				                        ss << confidence;
+				                        String conf(ss.str());
+				                        String label = String(classNamesVec[objectClass]) + ": " + conf;
+				                        int baseLine = 0;
+				                        Size labelSize = getTextSize(label, FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseLine);
+				                        rectangle(basketRoI, Rect(Point(xLeftBottom, yLeftBottom ),
+				                                              Size(labelSize.width, labelSize.height + baseLine)),
+				                                  Scalar(255, 255, 255), CV_FILLED);
+				                        putText(basketRoI, label, Point(xLeftBottom, yLeftBottom+labelSize.height),
+				                                FONT_HERSHEY_SIMPLEX, 0.5, Scalar(0,0,0));
+				                    }
+				                    else
+				                    {
+				                        cout << "Class: " << objectClass << endl;
+				                        cout << "Confidence: " << confidence << endl;
+				                        cout << " " << xLeftBottom
+				                             << " " << yLeftBottom
+				                             << " " << xRightTop
+				                             << " " << yRightTop << endl;
+				                    }
+				                }
+				            }
+
+				            imshow("YOLO: Detections", basketRoI);
+
+				            //********End of Shot Prediction **********
+
+
 							//---Start of using player position on halfcourt image to draw shot location-----
 							if (frameCount > 50)
 							{
