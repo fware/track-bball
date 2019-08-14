@@ -32,9 +32,11 @@ class PlayerObs {
 		int 	placement;
 		Point   position; 
 		int 	frameCount;
+		int 	shotsTaken;
+		int		shotsMade;
 };
 
-PlayerObs::PlayerObs() : activeValue( 0 ), radiusIdx( 0 ), placement( 0 ), position(0, 0), frameCount( 0 )
+PlayerObs::PlayerObs() : activeValue( 0 ), radiusIdx( 0 ), placement( 0 ), position(0, 0), frameCount( 0 ), shotsTaken(0), shotsMade(0)
 {}
 
 
@@ -55,6 +57,7 @@ static void help()
 
 int main(int argc, const char** argv)
 {
+	int debugFlag = false;
 	const string videoIdx 							= argc >= 2 ? argv[1] : "1";
 	int fileNumber;
 	string videofileName;
@@ -72,14 +75,23 @@ int main(int argc, const char** argv)
     string vIdx 									= vSS.str();
 	if ( fileNumber <= 5 )
 	{
+		//videofileName 						= "/home/fred/Videos/testvideos/v" + vIdx + "-vga-fs.mp4";
 		videofileName 						= "/home/fred/Videos/testvideos/v" + vIdx + ".mp4";
 	}
-	else if ( fileNumber > 6 && fileNumber < 18 )
+	else if ( fileNumber > 5 && fileNumber <= 18 )
+	{
+		//videofileName 						= "/home/fred/Videos/testvideos/v" + vIdx + "-vga-fs.MOV";
+		videofileName 						= "/home/fred/Videos/testvideos/v" + vIdx + ".MOV";
+	}
+	else if ( fileNumber > 18 && fileNumber <= 25)
+	{
+		//videofileName 						= "/home/fred/Videos/testvideos/v" + vIdx + "-vga-fs.mp4";
+		videofileName 						= "/home/fred/Videos/testvideos/v" + vIdx + ".mp4";
+	}
+	else
 	{
 		videofileName 						= "/home/fred/Videos/testvideos/v" + vIdx + ".MOV";
 	}
-	else
-		videofileName 						= "/home/fred/Videos/testvideos/v" + vIdx + ".mp4";
 
     help();
 	int frameCount 									= 0;
@@ -172,11 +184,12 @@ int main(int argc, const char** argv)
     Size S = Size((int) cap.get(CAP_PROP_FRAME_WIDTH),    // Acquire input size
                   (int) cap.get(CAP_PROP_FRAME_HEIGHT));
     //cout << "S=" << S << endl;
-	if (S.width > 640)
+	if (S.width > /*320*/ 640)
 	{
 		sizeFlag = true;
-		S = Size(640, 480);
+		S = Size(640, 480);  //Size(320,240);  //Size(640, 480);
 		resize(firstFrame, firstFrame, S);
+		resize(bbsrc, bbsrc, S);
 	}
 	//Size outS = Size ((int) 2 * S.width, S.height);
 	//VideoWriter outputVideo;
@@ -193,7 +206,7 @@ int main(int argc, const char** argv)
 	bottomBBRegionLimit = (int) leftActiveBoundary;
 
 	firstFrame.release();
-	
+
 	cv::Rect unionRect;
 	bool isFirstPass = true;
     for(;;)
@@ -203,7 +216,7 @@ int main(int argc, const char** argv)
         if (sizeFlag)
         	resize(img, img, S);
 
-        if (fileNumber > 10)
+        if (fileNumber > 10 && fileNumber <= 22)
         {
         	flip(img, img, 0);
         }
@@ -230,6 +243,7 @@ int main(int argc, const char** argv)
 			findContours( grayImage, boardContours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE, Point(0, 0) );
 			vector< vector<Point> > contours_poly( boardContours.size() );
 			vector<Rect> boundRect( boardContours.size() );
+
 			for ( size_t i = 0; i < boardContours.size(); i++ )
 			{
 				approxPolyDP(Mat(boardContours[i]),contours_poly[i],3,true);
@@ -250,6 +264,13 @@ int main(int argc, const char** argv)
         			{
         				unionRect = boundRect[i];
         				isFirstPass = false;
+
+						///Debug
+						//int pix_val = (int)grayImage.at<uchar>(Point(32, 32));
+						//str = std::to_string(frameCount) + ": boardContours.size()=" + std::to_string(boardContours.size());
+						//cout << std::to_string(frameCount) + ": unionRect.x=" + std::to_string(unionRect.x) + "\n";
+						//goto endloop;
+						///Debug
         			}
         			else if (frameCount < 100)
         			{
@@ -266,6 +287,7 @@ int main(int argc, const char** argv)
                                                 unionRect.size().height);
 
 						Point semiCircleCenterPt( (offsetBackboard.tl().x+offsetBackboard.width/2) , (offsetBackboard.tl().y + offsetBackboard.height/2) );
+
 		                bbCenterPosit = semiCircleCenterPt;
 
         				Backboard = unionRect;
@@ -275,14 +297,23 @@ int main(int argc, const char** argv)
         			}
         			//else
         			//	rectangle(img, boundRect[i].tl(), boundRect[i].br(), Scalar(0,255,0), 2, 8, 0);
-				}
-			}
+
+				}  //(boundRect[i].x > leftBBRegionLimit)
+
+			}  //( size_t i = 0; i < boardContours.size(); i++ )
+
 		}   //if (!haveBackboard)
+
 		///*************************End of main code to detect BackBoard*************************
+
+		///Debugging
+		///std::string sstr = ":BackboardCenterX=" + std::to_string(BackboardCenterX);
+		///cout << frameCount << sstr << endl;
+
 
 		///*******Start of main code to detect Basketball*************************
 
-		if (haveBackboard)
+		if (haveBackboard /*&& (frameCount % 5 == 0)*/)
 		{
 	    	if (!semiCircleReady)
 	    	{
@@ -312,8 +343,10 @@ int main(int argc, const char** argv)
 			getGray(img,grayImage);											//Converts to a gray image.  All we need is a gray image for cv computing.
 			blur(grayImage, grayImage, Size(3,3));							//Blurs, i.e. smooths, an image using the normalized box filter.  Used to reduce noise.
 			bg_model->apply(grayImage, fgmask);				//Computes a foreground mask for the input video frame.
+			imshow("bgapply fgmask", fgmask);
 			Canny(fgmask, fgmask, thresh, thresh*2, 3);			//Finds edges in an image.  Going to use it to help identify and track the basketball.
 																//Also used in the processing pipeline to identify the person(i.e. human body) shooting the ball.
+
 
 			vector<vector<Point> > bballContours;
 			vector<Vec4i> hierarchy;
@@ -333,7 +366,7 @@ int main(int argc, const char** argv)
 			float canny2 = 14; //16;
 			double minDist = imgBball.rows/4;   //8; //4;
 			HoughCircles(imgBball, basketballTracker, HOUGH_GRADIENT, 1, minDist, canny1, canny2, 1, 9 );	//Finds circles in input image. (imgBball)
-																												//Writes output to output array (basketballTracker)
+																											//Writes output to output array (basketballTracker)
 
 			if (basketballTracker.size() > 0)
 			{
@@ -357,9 +390,10 @@ int main(int argc, const char** argv)
 						Rect objIntersect = Backboard & ballRect;
 
 						//---Start of the process of identifying a shot at the basket!!!------------
-						if (objIntersect.area() > 0) {
+						if (objIntersect.area() > 0)
+						{
 
-							//Predict is a made shot
+							//Predict a made shot
 							Mat basketRoI = img(Backboard).clone();
 				            //resize(basketRoI, basketRoI, Size(416,416));
 
@@ -426,7 +460,11 @@ int main(int argc, const char** argv)
 				                }
 				            }
 
-				            imshow("YOLO: Detections", basketRoI);
+			                ///Debug
+				            //if (debugFlag)
+				            //	goto endloop;
+				            ///imshow("YOLO: Detections", basketRoI);
+			                ///Debug
 
 				            //********End of Shot Prediction **********
 
@@ -517,8 +555,8 @@ int main(int argc, const char** argv)
 		}  //if (haveBackboard)
 
 		//Create string of frame counter to display on video window.
-		string str = "frame" + ss.str();		
-		putText(img, str, Point(100, 100), FONT_HERSHEY_PLAIN, 2 , greenColor, 2);
+		string str = ss.str();   //"frame" + ss.str();
+		putText(img, str, Point(5, 20), FONT_HERSHEY_PLAIN, 2 , greenColor, 0.5);   //, 2);
 		Mat left(finalImg, Rect(0, 0, img.cols, img.rows));
 		img.copyTo(left);
 		Mat right(finalImg, Rect(bbsrc.cols, 0, bbsrc.cols, bbsrc.rows));
@@ -532,6 +570,9 @@ int main(int argc, const char** argv)
 
 		//outputVideo << finalImg;
     }
+
+endloop:
+	cout << "Debug flag ends processing" << endl;
 
     return 0;
 }
