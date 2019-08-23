@@ -14,6 +14,7 @@
 #include <iostream>
 #include <vector>
 #include <algorithm>
+#include <cvblob.h>
 
 
 //#define IMG_DEBUG
@@ -22,6 +23,7 @@
 using namespace std;
 using namespace cv;
 using namespace cv::dnn;
+using namespace cvb;
 
 class PlayerObs {
 	public:
@@ -57,7 +59,7 @@ static void help()
 
 int main(int argc, const char** argv)
 {
-	int debugFlag = false;
+	//int debugFlag = false;
 	const string videoIdx 							= argc >= 2 ? argv[1] : "1";
 	int fileNumber;
 	string videofileName;
@@ -146,6 +148,8 @@ int main(int argc, const char** argv)
 	Point mostRecentPosition;
 	const string OUTNAME = "v4_output_longversion.mp4";
 
+	CvTracks tracks;
+
 	if( !body_cascade.load( body_cascade_name ) )
 	{
 		printf("--(!)Error loading body_cascade_name\n"); return -1;
@@ -206,6 +210,8 @@ int main(int argc, const char** argv)
 	bottomBBRegionLimit = (int) leftActiveBoundary;
 
 	firstFrame.release();
+
+	IplConvKernel* morphKernel = cvCreateStructuringElementEx(5, 5, 1, 1, CV_SHAPE_RECT, NULL);
 
 	cv::Rect unionRect;
 	bool isFirstPass = true;
@@ -306,11 +312,6 @@ int main(int argc, const char** argv)
 
 		///*************************End of main code to detect BackBoard*************************
 
-		///Debugging
-		///std::string sstr = ":BackboardCenterX=" + std::to_string(BackboardCenterX);
-		///cout << frameCount << sstr << endl;
-
-
 		///*******Start of main code to detect Basketball*************************
 
 		if (haveBackboard /*&& (frameCount % 5 == 0)*/)
@@ -340,59 +341,91 @@ int main(int argc, const char** argv)
 	    		semiCircleReady = true;
 	    	}
 
-			getGray(img,grayImage);											//Converts to a gray image.  All we need is a gray image for cv computing.
-			blur(grayImage, grayImage, Size(3,3));							//Blurs, i.e. smooths, an image using the normalized box filter.  Used to reduce noise.
-			bg_model->apply(grayImage, fgmask);				//Computes a foreground mask for the input video frame.
-			imshow("bgapply fgmask", fgmask);
-			Canny(fgmask, fgmask, thresh, thresh*2, 3);			//Finds edges in an image.  Going to use it to help identify and track the basketball.
-																//Also used in the processing pipeline to identify the person(i.e. human body) shooting the ball.
+			IplImage iImg = img;
+			IplImage *segmentated = cvCreateImage(S, 8, 1);
 
-
-			vector<vector<Point> > bballContours;
-			vector<Vec4i> hierarchy;
-			findContours(fgmask,bballContours,hierarchy,RETR_TREE,CHAIN_APPROX_SIMPLE, Point(0, 0) );	//Finds contours in foreground mask image.
-
-			Mat imgBball = Mat::zeros(fgmask.size(),CV_8UC1);
-			for (size_t i = 0; i < bballContours.size(); i++ )
+			unsigned int S_height = (unsigned int) S.height;
+		    unsigned int S_width = (unsigned int) S.width;
+			for (unsigned int j=0; j< S_height; j++)
 			{
-				Scalar color = Scalar( rng.uniform(0, 255), rng.uniform(0, 255), rng.uniform(0, 255) );
-				drawContours(imgBball,bballContours,i,color,2,8,hierarchy,0,Point());	//Draws contours onto output image, i.e. imgBball.
-																						//The goal here is the find and track the basketball inside of imgBball image frames
+				for (unsigned int i=0; i<S_width; i++)
+				{
+					CvScalar c = cvGet2D(&iImg, j, i);
+
+					double b = ((double)c.val[0])/255.;
+					double g = ((double)c.val[1])/255.;
+					double r = ((double)c.val[2])/255.;
+
+					unsigned char f = 255 * ( ( r > 0.12 + g ) && ( r > 0.16 + b ) && (g > 0.013 + b));   //Yes good for now!
+
+					/*if (f > 0)
+					{
+					  cout << "bgr=" << b << " , " << g << " , " << r << endl;
+					}*/
+
+					cvSet2D(segmentated, j, i, CV_RGB(f, f, f));
+				}
 			}
 
-			//------------Track the basketball!!!!---------------
-			vector<Vec3f> basketballTracker;
-			float canny1 = 100;
-			float canny2 = 14; //16;
-			double minDist = imgBball.rows/4;   //8; //4;
-			HoughCircles(imgBball, basketballTracker, HOUGH_GRADIENT, 1, minDist, canny1, canny2, 1, 9 );	//Finds circles in input image. (imgBball)
-																											//Writes output to output array (basketballTracker)
+			cvMorphologyEx(segmentated, segmentated, NULL, morphKernel, CV_MOP_OPEN, 1);
 
-			if (basketballTracker.size() > 0)
+			IplImage *labelImg = cvCreateImage(cvGetSize(&iImg), IPL_DEPTH_LABEL, 1);
+
+			CvBlobs blobs;
+			unsigned int result = cvLabel(segmentated, labelImg, blobs);
+
+			//cout << __LINE__ << "  Bug   cvLabel result=" << result << endl;
+			cvFilterByArea(blobs, 25, 1000000); //25, 1000);
+			cvRenderBlobs(labelImg, blobs, &iImg, &iImg, CV_BLOB_RENDER_BOUNDING_BOX);
+			cvUpdateTracks(blobs, tracks, 2. /*30.*/, /*5*/ 10, 2);
+
+			unsigned left = 0, top = 0;
+			unsigned t_width = 0, t_height = 0;
+
+			vector<cv::Rect> trRects;
+			//for (CvTracks::const_iterator jt = tracks.begin(); jt!=tracks.end(); ++jt)
+			for (CvBlobs::const_iterator jt = blobs.begin(); jt!=blobs.end(); ++jt)
 			{
-				for (size_t i = 0; i < basketballTracker.size(); i++)
+			  left = jt->second->minx;
+			  top = jt->second->miny;
+			  t_width = jt->second->maxx - jt->second->minx;
+			  t_height = jt->second->maxy - jt->second->miny;
+			  //float t_ratio = (float) t_width / (float) t_height;
+			  //cout << frameCount << " :tracks-id" << jt->second->id << "   width=" << t_width
+				//	            << "   height=" << t_height << "   blob ratio=" << t_ratio << endl;
+			 // if (t_ratio > 0.95 && t_ratio < 3.155)
+			  trRects.push_back(cv::Rect(left, top, t_width, t_height));
+			  //cout << "tracks-id" << jt->second->label << "[" << left << "," << right << ","
+			  //     << t_width << "," << t_height << "]" << endl;
+			}
+
+			cvRenderTracks(tracks, &iImg, &iImg, CV_TRACK_RENDER_ID|CV_TRACK_RENDER_BOUNDING_BOX);
+
+			cvReleaseImage(&labelImg);
+			cvReleaseImage(&segmentated);
+
+			//------------Track the basketball!!!!---------------
+
+			//Writes output to output array (basketballTracker)
+
+			unsigned int nTracks =  trRects.size();  //tracks.size();
+			if (nTracks > 0)
+			{
+				for (vector<cv::Rect>::iterator jt = trRects.begin(); jt!=trRects.end(); ++jt)
 				{
-					Point bballCenter(cvRound(basketballTracker[i][0]), cvRound(basketballTracker[i][1]));
-					double bballRadius = (double) cvRound(basketballTracker[i][2]);
-					double bballDiameter = (double)(2*bballRadius);
-
-					int bballXtl = (int)(basketballTracker[i][0]-bballRadius);
-					int bballYtl = (int)(basketballTracker[i][1]-bballRadius);
-					ballRect = Rect(bballXtl, bballYtl, bballDiameter, bballDiameter);
-
+					ballRect = *jt;
 					if ( (ballRect.x > leftActiveBoundary)
 									&& (ballRect.x < rightActiveBoundary)
 									&& (ballRect.y > topActiveBoundary)
 									&& (ballRect.y < bottomActiveBoundary) )
 					{
 						//The basketball on video frames.
-						rectangle(img, ballRect.tl(), ballRect.br(), Scalar(60,180,255), 2, 8, 0 );
+						//rectangle(img, ballRect.tl(), ballRect.br(), Scalar(60,180,255), 2, 8, 0 );
 						Rect objIntersect = Backboard & ballRect;
 
 						//---Start of the process of identifying a shot at the basket!!!------------
 						if (objIntersect.area() > 0)
 						{
-
 							//Predict a made shot
 							Mat basketRoI = img(Backboard).clone();
 				            //resize(basketRoI, basketRoI, Size(416,416));
@@ -432,7 +465,7 @@ int main(int argc, const char** argv)
 				                                xRightTop - xLeftBottom,
 				                                yRightTop - yLeftBottom);
 
-				                    rectangle(basketRoI, object, Scalar(0, 255, 0));
+				                    //rectangle(basketRoI, object, Scalar(0, 255, 0));
 
 				                    if (objectClass < classNamesVec.size())
 				                    {
@@ -442,11 +475,11 @@ int main(int argc, const char** argv)
 				                        String label = String(classNamesVec[objectClass]) + ": " + conf;
 				                        int baseLine = 0;
 				                        Size labelSize = getTextSize(label, FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseLine);
-				                        rectangle(basketRoI, Rect(Point(xLeftBottom, yLeftBottom ),
+				                        /*rectangle(basketRoI, Rect(Point(xLeftBottom, yLeftBottom ),
 				                                              Size(labelSize.width, labelSize.height + baseLine)),
-				                                  Scalar(255, 255, 255), CV_FILLED);
-				                        putText(basketRoI, label, Point(xLeftBottom, yLeftBottom+labelSize.height),
-				                                FONT_HERSHEY_SIMPLEX, 0.5, Scalar(0,0,0));
+				                                  Scalar(255, 255, 255), CV_FILLED);*/
+				                        /*putText(basketRoI, label, Point(xLeftBottom, yLeftBottom+labelSize.height),
+				                                FONT_HERSHEY_SIMPLEX, 0.5, Scalar(0,0,0));*/
 				                    }
 				                    else
 				                    {
@@ -571,8 +604,9 @@ int main(int argc, const char** argv)
 		//outputVideo << finalImg;
     }
 
-endloop:
-	cout << "Debug flag ends processing" << endl;
+//endloop:
+//	cout << "Debug flag ends processing" << endl;
+    cvReleaseStructuringElement(&morphKernel);
 
     return 0;
 }
