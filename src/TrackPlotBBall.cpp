@@ -270,13 +270,6 @@ int main(int argc, const char** argv)
         			{
         				unionRect = boundRect[i];
         				isFirstPass = false;
-
-						///Debug
-						//int pix_val = (int)grayImage.at<uchar>(Point(32, 32));
-						//str = std::to_string(frameCount) + ": boardContours.size()=" + std::to_string(boardContours.size());
-						//cout << std::to_string(frameCount) + ": unionRect.x=" + std::to_string(unionRect.x) + "\n";
-						//goto endloop;
-						///Debug
         			}
         			else if (frameCount < 100)
         			{
@@ -358,11 +351,6 @@ int main(int argc, const char** argv)
 
 					unsigned char f = 255 * ( ( r > 0.12 + g ) && ( r > 0.16 + b ) && (g > 0.013 + b));   //Yes good for now!
 
-					/*if (f > 0)
-					{
-					  cout << "bgr=" << b << " , " << g << " , " << r << endl;
-					}*/
-
 					cvSet2D(segmentated, j, i, CV_RGB(f, f, f));
 				}
 			}
@@ -372,10 +360,9 @@ int main(int argc, const char** argv)
 			IplImage *labelImg = cvCreateImage(cvGetSize(&iImg), IPL_DEPTH_LABEL, 1);
 
 			CvBlobs blobs;
-			unsigned int result = cvLabel(segmentated, labelImg, blobs);
+			unsigned int totalLabeledPixels = cvLabel(segmentated, labelImg, blobs);
 
-			//cout << __LINE__ << "  Bug   cvLabel result=" << result << endl;
-			cvFilterByArea(blobs, 25, 1000000); //25, 1000);
+			cvFilterByArea(blobs, 75/*25*/, 1000000); //25, 1000);
 			cvRenderBlobs(labelImg, blobs, &iImg, &iImg, CV_BLOB_RENDER_BOUNDING_BOX);
 			cvUpdateTracks(blobs, tracks, 2. /*30.*/, /*5*/ 10, 2);
 
@@ -390,13 +377,7 @@ int main(int argc, const char** argv)
 			  top = jt->second->miny;
 			  t_width = jt->second->maxx - jt->second->minx;
 			  t_height = jt->second->maxy - jt->second->miny;
-			  //float t_ratio = (float) t_width / (float) t_height;
-			  //cout << frameCount << " :tracks-id" << jt->second->id << "   width=" << t_width
-				//	            << "   height=" << t_height << "   blob ratio=" << t_ratio << endl;
-			 // if (t_ratio > 0.95 && t_ratio < 3.155)
 			  trRects.push_back(cv::Rect(left, top, t_width, t_height));
-			  //cout << "tracks-id" << jt->second->label << "[" << left << "," << right << ","
-			  //     << t_width << "," << t_height << "]" << endl;
 			}
 
 			cvRenderTracks(tracks, &iImg, &iImg, CV_TRACK_RENDER_ID|CV_TRACK_RENDER_BOUNDING_BOX);
@@ -420,7 +401,6 @@ int main(int argc, const char** argv)
 									&& (ballRect.y < bottomActiveBoundary) )
 					{
 						//The basketball on video frames.
-						//rectangle(img, ballRect.tl(), ballRect.br(), Scalar(60,180,255), 2, 8, 0 );
 						Rect objIntersect = Backboard & ballRect;
 
 						//---Start of the process of identifying a shot at the basket!!!------------
@@ -465,8 +445,6 @@ int main(int argc, const char** argv)
 				                                xRightTop - xLeftBottom,
 				                                yRightTop - yLeftBottom);
 
-				                    //rectangle(basketRoI, object, Scalar(0, 255, 0));
-
 				                    if (objectClass < classNamesVec.size())
 				                    {
 				                        ss.str("");
@@ -492,18 +470,10 @@ int main(int argc, const char** argv)
 				                    }
 				                }
 				            }
-
-			                ///Debug
-				            //if (debugFlag)
-				            //	goto endloop;
-				            ///imshow("YOLO: Detections", basketRoI);
-			                ///Debug
-
 				            //********End of Shot Prediction **********
 
-
 							//---Start of using player position on halfcourt image to draw shot location-----
-							if (frameCount > 50)
+							if (haveBackboard)
 							{
 								circle(bbsrc, courtArc[newPlayerWindow.radiusIdx][newPlayerWindow.placement], 1, Scalar(0, 165, 255), 3);
 							}
@@ -516,6 +486,8 @@ int main(int argc, const char** argv)
 			}
 
 			//-- detect body
+			getGray(img,grayImage);											//Converts to a gray image.  All we need is a gray image for cv computing.
+			blur(grayImage, grayImage, Size(3,3));							//Blurs, i.e. smooths, an image using the normalized box filter.  Used to reduce noise.
 			body_cascade.detectMultiScale(grayImage, bodys, 1.1, 2, 18|9|CASCADE_SCALE_IMAGE, Size(3,7));  //Detects object of different sizes in the input image.
 																											 //This detector is looking for human bodies with min Size(3, 7) in a VGA image.
 			ss << frameCount;
@@ -524,6 +496,8 @@ int main(int argc, const char** argv)
 			{
 				//-----------Identifying player height and position!!--------------
 				Point bodyCenter( bodys[j].x + bodys[j].width*0.5, bodys[j].y + bodys[j].height*0.5 );
+				Point bodyLine = bodyCenter + Point(3, 3);
+				//line(img, bodyCenter, bodyLine, Scalar(0,255,0), 2);  //For debug purposes
 
 				//--- Start of adjusting player position on image of half court!!!-----
 				newPlayerWindow.frameCount = frameCount;
