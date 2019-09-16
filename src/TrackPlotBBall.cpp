@@ -97,6 +97,7 @@ int main(int argc, const char** argv)
 
     help();
 	int frameCount 									= 0;
+	int frameWindow									= 0;
 	const string bballPatternFile 					= "/home/fred/Pictures/OrgTrack_res/bball3_vga.jpg";
 	Mat patternImage 								= imread(bballPatternFile);
 	const string bballFileName 						= "/home/fred/Pictures/OrgTrack_res/bball-half-court-vga.jpeg";
@@ -104,8 +105,8 @@ int main(int argc, const char** argv)
     Mat bbsrc 										= imread(bballFileName);	
 	int thresh 										= 85;
 	RNG rng(12345);
-	int backboardOffsetX							= 0;
-	int backboardOffsetY							= 0;
+	int backboardOffsetX;
+	int backboardOffsetY;
 	int newPlayerWindowSize 						= 50;
 	PlayerObs newPlayerWindow;
 	vector <int> radiusArray;
@@ -123,6 +124,9 @@ int main(int argc, const char** argv)
 	Rect ballRect;				//Represents the box around the trackable basketball
 	vector< vector<Point> > boardContours;	
 	Scalar greenColor 								= Scalar (0, 215, 0);
+	Scalar redColor 								= Scalar (0, 0, 215);
+	Scalar blueColor								= Scalar (215, 0, 0);
+	Scalar rngColor = Scalar( rng.uniform(0, 255), rng.uniform(0, 255), rng.uniform(0, 255) );
 	bool haveBackboard 								= false;
     vector<Rect> bodys;
 	String body_cascade_name 						= "/home/fred/Pictures/OrgTrack_res/cascadeconfigs/haarcascade_fullbody.xml";
@@ -145,8 +149,16 @@ int main(int argc, const char** argv)
 	int rightBBRegionLimit;
 	//int topBBRegionLimit;
 	int bottomBBRegionLimit;
-	Point mostRecentPosition;
 	const string OUTNAME = "v4_output_longversion.mp4";
+	const string X_str = "x";
+	const string O_str = "o";
+	int body_height_sum = 0;
+	int body_height_max = 0;
+	Point body_max_tl, body_max_br;
+	float body_height_avg;
+	Point body_tl, body_br;
+	Point bodyCenter;
+
 
 	CvTracks tracks;
 
@@ -188,10 +200,10 @@ int main(int argc, const char** argv)
     Size S = Size((int) cap.get(CAP_PROP_FRAME_WIDTH),    // Acquire input size
                   (int) cap.get(CAP_PROP_FRAME_HEIGHT));
     //cout << "S=" << S << endl;
-	if (S.width > /*320*/ 640)
+	if (S.width > 640)
 	{
 		sizeFlag = true;
-		S = Size(640, 480);  //Size(320,240);  //Size(640, 480);
+		S = Size(640,480);  //Size(320,240);  //Size(640, 480);
 		resize(firstFrame, firstFrame, S);
 		resize(bbsrc, bbsrc, S);
 	}
@@ -215,6 +227,8 @@ int main(int argc, const char** argv)
 
 	cv::Rect unionRect;
 	bool isFirstPass = true;
+
+
     for(;;)
     {
         cap >> img;
@@ -222,7 +236,7 @@ int main(int argc, const char** argv)
         if (sizeFlag)
         	resize(img, img, S);
 
-        if (fileNumber > 10 && fileNumber <= 22)
+        if (fileNumber > 10 && fileNumber <= 21)
         {
         	flip(img, img, 0);
         }
@@ -237,10 +251,11 @@ int main(int argc, const char** argv)
 			printf("--(!)Error loading body_cascade_name\n"); return -1; 
 		}*/
 
+		stringstream frame_ss;
 		stringstream ss;
 		if (!haveBackboard)
 		{
-	    	ss << frameCount;
+	    	//frame_ss << frameCount;
 
 			getGray(img,grayImage);											//Converts to a gray image.  All we need is a gray image for cv computing.
 			blur(grayImage, grayImage, Size(3,3));							//Blurs, i.e. smooths, an image using the normalized box filter.  Used to reduce noise.
@@ -277,25 +292,31 @@ int main(int argc, const char** argv)
         			}
 
         			if (frameCount > 99) {
-        				//rectangle(img, unionRect.tl(), unionRect.br(), Scalar(0,255,0), 2, 8, 0);
 						backboardOffsetX = -unionRect.tl().x + img.size().width/2 - 13;
 						backboardOffsetY = -unionRect.tl().y + 30;
-						offsetBackboard = Rect(unionRect.tl().x+backboardOffsetX,
-												unionRect.tl().y+backboardOffsetY,
+						offsetBackboard = Rect(unionRect.tl().x,
+												unionRect.tl().y - 40,
 												unionRect.size().width,
                                                 unionRect.size().height);
 
+						/*Rect offsetBackboard2 = Rect(unionRect.tl().x + 33,
+													unionRect.tl().y - 35,
+													unionRect.size().width,
+													unionRect.size().height);*/
+
+
+
 						Point semiCircleCenterPt( (offsetBackboard.tl().x+offsetBackboard.width/2) , (offsetBackboard.tl().y + offsetBackboard.height/2) );
 
-		                bbCenterPosit = semiCircleCenterPt;
+		                bbCenterPosit = semiCircleCenterPt;  // Coords for halfcourt shot chart image
+        				Backboard = unionRect;   //Coords for true video content
 
-        				Backboard = unionRect;
-        				BackboardCenterX = (Backboard.tl().x+(Backboard.width/2));
-        				BackboardCenterY = (Backboard.tl().y+(Backboard.height/2));
+        				BackboardCenterX = (Backboard.tl().x+(Backboard.width*3/4));   // (Backboard.tl().x+(Backboard.width/2));
+        				BackboardCenterY = (Backboard.tl().y+(Backboard.height*3/4));    // (Backboard.tl().y+(Backboard.height/2));
+        				//BackboardCenterX = (offsetBackboard2.tl().x + (offsetBackboard2.width/2));
+        				//BackboardCenterY = (offsetBackboard2.tl().y + (offsetBackboard2.height/2));
         				haveBackboard = true;
         			}
-        			//else
-        			//	rectangle(img, boundRect[i].tl(), boundRect[i].br(), Scalar(0,255,0), 2, 8, 0);
 
 				}  //(boundRect[i].x > leftBBRegionLimit)
 
@@ -306,19 +327,27 @@ int main(int argc, const char** argv)
 		///*************************End of main code to detect BackBoard*************************
 
 		///*******Start of main code to detect Basketball*************************
+		frame_ss << frameCount;
+		string frame_str = frame_ss.str();   //"frame" + ss.str();
 
-		if (haveBackboard /*&& (frameCount % 5 == 0)*/)
+		if (haveBackboard)
 		{
+			putText(bbsrc, "C",
+					bbCenterPosit /*Point(BackboardCenterX, BackboardCenterY)*/,
+					FONT_HERSHEY_PLAIN, 1 ,
+					greenColor, 1,
+					0.5);   //, 2);
+
 	    	if (!semiCircleReady)
 	    	{
 	    		int radiusIdx = 0;
-	    		for (int radius = 40; radius < 280; radius+= 20)   //Radius for distFromBB
+	    		for (int radius = 40; radius < 280; radius += 20)   //Radius for euclidDistFromBB
 	    		{
 	    			radiusArray.push_back(radius);
 
 	    			int temp1, temp2, temp3;
 	    			int yval;
-	    			for (int j = (bbCenterPosit.x - radius); j <= bbCenterPosit.x + radius; j++)   //Using Pythagorean's theorem to find positions on the each court arc.
+	    			for (int j = (bbCenterPosit.x - radius); j <= (bbCenterPosit.x + radius); j++)   //Using Pythagorean's theorem to find positions on each court arc.
 	    			{
 	    				temp1 = radius * radius;
 	    				temp2 = (j - bbCenterPosit.x) * (j - bbCenterPosit.x);
@@ -327,6 +356,7 @@ int main(int argc, const char** argv)
 	    				yval += bbCenterPosit.y;
 	    				Point ptTemp = Point(j, yval);
 	    				courtArc[radiusIdx][j] = ptTemp;
+	    				circle(bbsrc, ptTemp, 1, blueColor, -1);
 	    			}
 
 	    			radiusIdx++;
@@ -406,6 +436,8 @@ int main(int argc, const char** argv)
 						//---Start of the process of identifying a shot at the basket!!!------------
 						if (objIntersect.area() > 0)
 						{
+							//putText(bbsrc, X_str, courtArc[newPlayerWindow.radiusIdx][newPlayerWindow.placement], FONT_HERSHEY_PLAIN, 1 , redColor, 1, LINE_4);   //, 2);
+
 							//Predict a made shot
 							Mat basketRoI = img(Backboard).clone();
 				            //resize(basketRoI, basketRoI, Size(416,416));
@@ -455,8 +487,8 @@ int main(int argc, const char** argv)
 				                        Size labelSize = getTextSize(label, FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseLine);
 				                        /*rectangle(basketRoI, Rect(Point(xLeftBottom, yLeftBottom ),
 				                                              Size(labelSize.width, labelSize.height + baseLine)),
-				                                  Scalar(255, 255, 255), CV_FILLED);*/
-				                        /*putText(basketRoI, label, Point(xLeftBottom, yLeftBottom+labelSize.height),
+				                                  Scalar(255, 255, 255), CV_FILLED);
+				                        putText(basketRoI, label, Point(xLeftBottom, yLeftBottom+labelSize.height),
 				                                FONT_HERSHEY_SIMPLEX, 0.5, Scalar(0,0,0));*/
 				                    }
 				                    else
@@ -470,12 +502,19 @@ int main(int argc, const char** argv)
 				                    }
 				                }
 				            }
+				            //imshow("YOLO: Detections", basketRoI);
 				            //********End of Shot Prediction **********
 
 							//---Start of using player position on halfcourt image to draw shot location-----
-							if (haveBackboard)
+
+							if (haveBackboard && frameCount > frameWindow)
 							{
-								circle(bbsrc, courtArc[newPlayerWindow.radiusIdx][newPlayerWindow.placement], 1, Scalar(0, 165, 255), 3);
+								frameWindow = frameCount + 10;
+								//circle(bbsrc, courtArc[newPlayerWindow.radiusIdx][newPlayerWindow.placement], 1, Scalar(0, 165, 255), 3);
+								//putText(bbsrc, O_str, courtArc[newPlayerWindow.radiusIdx][newPlayerWindow.placement], FONT_HERSHEY_PLAIN, 1 , greenColor, 1, LINE_4);   //, 2);
+								Point offPt = Point(courtArc[newPlayerWindow.radiusIdx][newPlayerWindow.placement].x-5, courtArc[newPlayerWindow.radiusIdx][newPlayerWindow.placement].y-5);
+								putText(bbsrc, frame_str, offPt, FONT_HERSHEY_PLAIN, 1 , rngColor, 1, 0.5);   //, 2);
+								//putText(bbsrc, X_str, courtArc[newPlayerWindow.radiusIdx][newPlayerWindow.placement], FONT_HERSHEY_PLAIN, 1 , redColor, 1, LINE_4);   //, 2);
 							}
 						}
 						//---Start of using player position on halfcourt image to draw shot location-----
@@ -487,34 +526,125 @@ int main(int argc, const char** argv)
 
 			//-- detect body
 			getGray(img,grayImage);											//Converts to a gray image.  All we need is a gray image for cv computing.
-			blur(grayImage, grayImage, Size(3,3));							//Blurs, i.e. smooths, an image using the normalized box filter.  Used to reduce noise.
-			body_cascade.detectMultiScale(grayImage, bodys, 1.1, 2, 18|9|CASCADE_SCALE_IMAGE, Size(3,7));  //Detects object of different sizes in the input image.
+			//blur(grayImage, grayImage, Size(3,3));							//Blurs, i.e. smooths, an image using the normalized box filter.  Used to reduce noise.
+			//body_cascade.detectMultiScale(grayImage, bodys, 1.05, 1, 18|9|CASCADE_SCALE_IMAGE, Size(3,7));  //Detects object of different sizes in the input image.
 																											 //This detector is looking for human bodies with min Size(3, 7) in a VGA image.
-			ss << frameCount;
+			//body_cascade.detectMultiScale(grayImage, bodys, 1.02, 2, 0|CV_HAAR_SCALE_IMAGE, Size(55,55));
+			int x_scale = 30;  int y_scale = 70;
+			body_cascade.detectMultiScale(grayImage, bodys, 1.1, 1, 0|CV_HAAR_SCALE_IMAGE, Size(x_scale, y_scale));
+			//ss << frameCount;
+			/*int oneBodyStart=0, oneBodyEnd=0;
+            if (bodys.size() > 0)
+            {
+            	oneBodyEnd = bodys.size()-1;
+            	oneBodyStart = oneBodyEnd-1;
+            }*/
 
-			for( int j = 0; j < (int) bodys.size(); j++ )
+
+			for( int j = 0 /*oneBodyStart*/; j < /*oneBodyEnd*/ (int) bodys.size(); j++ )
 			{
-				//-----------Identifying player height and position!!--------------
 				Point bodyCenter( bodys[j].x + bodys[j].width*0.5, bodys[j].y + bodys[j].height*0.5 );
-				Point bodyLine = bodyCenter + Point(3, 3);
-				//line(img, bodyCenter, bodyLine, Scalar(0,255,0), 2);  //For debug purposes
+				//-----------Identifying player height and position!!--------------
+				Point ballCenter( (ballRect.x + ballRect.width* 0.5), (ballRect.y + ballRect.height * 0.5));
+
+				double ballBodyDistance = euclideanDist(bodyCenter.x, bodyCenter.y, ballCenter.x, ballCenter.y);
+//				cout << "frameCount=" << frameCount << "   j=" << j << "   ballBodyDistance=" << ballBodyDistance
+//				     << "   body(" << bodyCenter.x << "," << bodyCenter.y << ")"
+//					 << "   ball(" << ballCenter.x << "," << ballCenter.y << ")";
+
+				if (ballBodyDistance > 60)
+				{
+//					cout << " too far away" << endl;
+					continue;
+				}
+
+				if (bodys[j].br().y < Backboard.br().y)
+				{
+//					cout << " false body by Backboard" << endl;
+					continue;
+				}
+
+				Rect bodyRect = Rect(bodys[j].tl(), bodys[j].br());
+				Rect badBodyIntersect = Backboard & bodyRect;
+				if (badBodyIntersect.area() > (0.6 * bodyRect.area()))
+				{
+//					cout << " false body2 by Backboard" << endl;
+					continue;
+				}
+
+				//Point bodyCenter( bodys[j].x + bodys[j].width*0.5, bodys[j].y + bodys[j].height*0.5 );
+				//rectangle(img, bodys[j].tl(), bodys[j].br(), greenColor, 2, 8, 0);
+				/*body_height_sum += bodys[j].height;
+				body_tl.x += bodys[j].tl().x;
+				body_tl.y += bodys[j].tl().y;
+				body_br.x += bodys[j].br().x;
+				body_br.y += bodys[j].br().x;
+
+				if (bodys[j].height > body_height_max)
+				{
+					body_height_max = bodys[j].height;
+					body_max_tl = bodys[j].tl();
+					body_max_br = bodys[j].br();
+				}*/
+
+//				cout << "draw ellipse" << endl;
+				ellipse( img, bodyCenter, Size( bodys[j].width*0.5, bodys[j].height*0.5), 0, 0, 360, Scalar( 255, 255, 255 ), 4, 8, 0 );
+				line(img, Point(BackboardCenterX, BackboardCenterY), bodyCenter, blueColor, 1, 8);
+
+				/*int framePeriod = 10;
+				if (frameCount % framePeriod == 0)
+				{
+					cout << frameCount << " : body_height_max=" << body_height_max << endl;
+					float hor_distance_tl = body_max_tl.x - Backboard.tl().x;
+					float hor_distance_br = body_max_br.x - Backboard.tl().x;
+
+					body_tl.x = (int) body_tl.x / framePeriod;
+					body_tl.y = (int) body_tl.y / framePeriod;
+					body_br.x = (int) body_br.x / framePeriod;
+					body_br.y = (int) body_br.y / framePeriod;
+					body_height_avg = (float) body_height_sum / framePeriod;
+					//cout << frameCount << " : body_height_max=" << body_height_max << " : body_avg=" << body_height_avg << endl;
+					//cout << "              hor_distance_tl= " << hor_distance_tl << "    hor_distance_br=" << hor_distance_br << endl;
+					rectangle(img, body_max_tl, body_max_br, greenColor, 2, 8, 0);
+
+					Point bodyLocal( (body_max_tl.x + body_max_br.x)*0.5, (body_max_tl.y + body_max_br.y)*0.5 );
+					bodyCenter = bodyLocal;
+
+					body_height_sum = 0; body_tl = Point(0,0); body_br = Point(0,0);
+					body_height_max = 0;
+				}*/
+				//cout << frameCount << " : body[" << j << "].height=" << bodys[j].height << endl;
+
 
 				//--- Start of adjusting player position on image of half court!!!-----
 				newPlayerWindow.frameCount = frameCount;
 				newPlayerWindow.activeValue = 1;
 				newPlayerWindow.position = bodyCenter;
 
-				double distFromBB = euclideanDist((double) BackboardCenterX,(double) BackboardCenterY,(double) bodyCenter.x, (double) bodyCenter.y);
+				double euclidDistFromBB = euclideanDist((double) BackboardCenterX,
+												  (double) BackboardCenterY,
+												  (double) bodyCenter.x,
+												  (double) bodyCenter.y);
+
 				double xDistFromBB = oneDDist(BackboardCenterX, bodyCenter.x);
 				double yDistFromBB = oneDDist(BackboardCenterY, bodyCenter.y);
 
-				if (distFromBB > 135)
+				float heightNorm = (float) bodys[j].height / 350.0f;
+
+
+
+				if (euclidDistFromBB > 135)
 				{
+					/*cout << frameCount << ": distBB-135+ =" << euclidDistFromBB << "   xDistFromBB=" << xDistFromBB
+							           << "   yDistFromBB=" << yDistFromBB
+									   << "   bodys[j].height=" << bodys[j].height << endl;*/
+					cout << frameCount <<": distBB 135+    heightNorm=" << heightNorm << endl;
+
 					newPlayerWindow.radiusIdx = radiusArray.size() * 0.99;
-					distFromBB += 120;
+					euclidDistFromBB += 120;
 
 					int tempPlacement = (bbCenterPosit.x + radiusArray[newPlayerWindow.radiusIdx])
-									- (bbCenterPosit.x - radiusArray[newPlayerWindow.radiusIdx]);
+									    - (bbCenterPosit.x - radiusArray[newPlayerWindow.radiusIdx]);
 
 					if (bodyCenter.x > BackboardCenterX)
 						tempPlacement -= 1;
@@ -525,8 +655,13 @@ int main(int argc, const char** argv)
 
 					newPlayerWindow.placement = tempPlacement;
 				}
-				else if (distFromBB < 30)
+				else if (euclidDistFromBB < 30)
 				{
+					/*cout << frameCount << ": distFromBB30-=" << euclidDistFromBB << "   xDistFromBB=" << xDistFromBB
+							           << "   yDistFromBB=" << yDistFromBB
+									   << "   bodys[j].height=" << bodys[j].height << endl;*/
+					cout << frameCount <<": distBB -30 heightNorm=" << heightNorm << endl;
+
 					int tempPlacement;
 					if (bodyCenter.x < BackboardCenterX)
 						tempPlacement = 0;
@@ -539,9 +674,15 @@ int main(int argc, const char** argv)
 				}
 				else
 				{
-					if (bodys[j].height < 170)    //NOTE:  If not true, then we have inaccurate calculation of body height from detectMultiscale method.  Do not estimate a player position for it.
+					/*cout << frameCount << ": euclidDistFromBB=" << euclidDistFromBB << "   xDistFromBB=" << xDistFromBB
+							           << "   yDistFromBB=" << yDistFromBB
+									   << "   ****bodys[j].height=" << bodys[j].height << endl;*/
+					cout << frameCount <<": ELSE  heightNorm=" << heightNorm << endl;
+
+
+					if (heightNorm < 0.5)    //NOTE:  If not true, then we have inaccurate calculation of body height from detectMultiscale method.  Do not estimate a player position for it.
 					{
-						newPlayerWindow.radiusIdx = findIndex_BSearch(radiusArray, distFromBB);
+						newPlayerWindow.radiusIdx = findIndex_BSearch(radiusArray, euclidDistFromBB);
 						newPlayerWindow.radiusIdx += 5;
 
 						if ((xDistFromBB < 51) && (yDistFromBB < 70))
@@ -558,12 +699,14 @@ int main(int argc, const char** argv)
 				}
 				//--- End of adjusting player position on image of half court!!!-----
 			}
-			rectangle(img, Backboard.tl(), Backboard.br(), Scalar(0,0,255), 2, 8, 0);
+
+			rectangle(img, Backboard.tl(), Backboard.br(), redColor, 2, 8, 0);
+			circle(img, Point(BackboardCenterX, BackboardCenterY), 1, greenColor, 3);
 		}  //if (haveBackboard)
 
 		//Create string of frame counter to display on video window.
-		string str = ss.str();   //"frame" + ss.str();
-		putText(img, str, Point(5, 20), FONT_HERSHEY_PLAIN, 2 , greenColor, 0.5);   //, 2);
+		//string str = ss.str();   //"frame" + ss.str();
+		putText(img, frame_str, Point(5, 20), FONT_HERSHEY_PLAIN, 2 , greenColor, 0.5);   //, 2);
 		Mat left(finalImg, Rect(0, 0, img.cols, img.rows));
 		img.copyTo(left);
 		Mat right(finalImg, Rect(bbsrc.cols, 0, bbsrc.cols, bbsrc.rows));
@@ -721,7 +864,7 @@ Mat drawSemiCircle(Mat& image, int radius, Point center) {
 		temp3 = temp1 - temp2;
 		yval = sqrt(temp3);
 		yval += center.y;			
-		circle(image, Point(x, yval), 1, Scalar(0,255,0), -1);			
+		circle(image, Point(x, yval), 1, Scalar(0,255,0), -1);
 	}
 	return image;
 }
