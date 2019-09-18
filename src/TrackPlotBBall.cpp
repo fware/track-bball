@@ -126,6 +126,9 @@ int main(int argc, const char** argv)
 	Scalar greenColor 								= Scalar (0, 215, 0);
 	Scalar redColor 								= Scalar (0, 0, 215);
 	Scalar blueColor								= Scalar (215, 0, 0);
+	//Scalar blackColor								= Scalar (40, 40, 40);
+	Scalar orangeColor								= Scalar (0, 140, 255);
+	Scalar aquaColor								= Scalar (255, 140, 0);
 	Scalar rngColor = Scalar( rng.uniform(0, 255), rng.uniform(0, 255), rng.uniform(0, 255) );
 	bool haveBackboard 								= false;
     vector<Rect> bodys;
@@ -530,8 +533,10 @@ int main(int argc, const char** argv)
 			//body_cascade.detectMultiScale(grayImage, bodys, 1.05, 1, 18|9|CASCADE_SCALE_IMAGE, Size(3,7));  //Detects object of different sizes in the input image.
 																											 //This detector is looking for human bodies with min Size(3, 7) in a VGA image.
 			//body_cascade.detectMultiScale(grayImage, bodys, 1.02, 2, 0|CV_HAAR_SCALE_IMAGE, Size(55,55));
-			int x_scale = 30;  int y_scale = 70;
-			body_cascade.detectMultiScale(grayImage, bodys, 1.1, 1, 0|CV_HAAR_SCALE_IMAGE, Size(x_scale, y_scale));
+			//int x_scale = 30;  int y_scale = 70;
+			int x_scale = 15;  int y_scale = 75;
+			//body_cascade.detectMultiScale(grayImage, bodys, 1.02, 1, 0|CV_HAAR_SCALE_IMAGE, Size(x_scale, y_scale));
+			body_cascade.detectMultiScale(grayImage, bodys, 1.02, 1, CV_HAAR_DO_CANNY_PRUNING, Size(x_scale, y_scale));
 			//ss << frameCount;
 			/*int oneBodyStart=0, oneBodyEnd=0;
             if (bodys.size() > 0)
@@ -587,10 +592,6 @@ int main(int argc, const char** argv)
 					body_max_br = bodys[j].br();
 				}*/
 
-//				cout << "draw ellipse" << endl;
-				ellipse( img, bodyCenter, Size( bodys[j].width*0.5, bodys[j].height*0.5), 0, 0, 360, Scalar( 255, 255, 255 ), 4, 8, 0 );
-				line(img, Point(BackboardCenterX, BackboardCenterY), bodyCenter, blueColor, 1, 8);
-
 				/*int framePeriod = 10;
 				if (frameCount % framePeriod == 0)
 				{
@@ -631,6 +632,20 @@ int main(int argc, const char** argv)
 
 				float heightNorm = (float) bodys[j].height / 350.0f;
 
+				//				cout << "draw ellipse" << endl;
+				ellipse( img, bodyCenter, Size( bodys[j].width*0.5, bodys[j].height*0.5), 0, 0, 360, aquaColor, 4, 8, 0 );
+				line(img, Point(BackboardCenterX, BackboardCenterY), bodyCenter, blueColor, 1, 8);
+
+
+				stringstream idx_ss;
+				idx_ss << j;
+				string idx_str = idx_ss.str();
+				putText(img, idx_str,Point((int)bodys[j].x + bodys[j].width*0.5-5, (int)bodys[j].y-5), FONT_HERSHEY_PLAIN, 1, aquaColor, 1, 0.5);
+
+				stringstream hss;
+				hss << bodys[j].height;
+				string bodyHgt_str = hss.str();
+				putText(img, bodyHgt_str,Point((int)bodys[j].x + bodys[j].width*0.5-5, (int)bodys[j].y + bodys[j].height*0.5-5), FONT_HERSHEY_PLAIN, 1, aquaColor, 1, 0.5);
 
 
 				if (euclidDistFromBB > 135)
@@ -702,6 +717,10 @@ int main(int argc, const char** argv)
 
 			rectangle(img, Backboard.tl(), Backboard.br(), redColor, 2, 8, 0);
 			circle(img, Point(BackboardCenterX, BackboardCenterY), 1, greenColor, 3);
+			stringstream iss;
+			iss << frameCount;
+			string i_str = iss.str();
+			imwrite("/home/fred/Temp/Temp/v23_stills/image" + i_str + ".jpg", img);
 		}  //if (haveBackboard)
 
 		//Create string of frame counter to display on video window.
