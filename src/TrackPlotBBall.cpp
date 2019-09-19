@@ -124,7 +124,7 @@ int main(int argc, const char** argv)
 	Scalar greenColor 								= Scalar (0, 215, 0);
 	Scalar redColor 								= Scalar (0, 0, 215);
 	Scalar blueColor								= Scalar (215, 0, 0);
-	//Scalar blackColor								= Scalar (40, 40, 40);
+	Scalar blackColor								= Scalar (40, 40, 40);
 	Scalar orangeColor								= Scalar (0, 140, 255);
 	Scalar aquaColor								= Scalar (255, 140, 0);
 	Scalar rngColor = Scalar( rng.uniform(0, 255), rng.uniform(0, 255), rng.uniform(0, 255) );
@@ -245,13 +245,12 @@ int main(int argc, const char** argv)
         if( img.empty() )
             break;
 
-		/*if( !body_cascade.load( body_cascade_name ) )
-		{ 
-			printf("--(!)Error loading body_cascade_name\n"); return -1; 
-		}*/
+		//if( !body_cascade.load( body_cascade_name ) )
+		//{
+		//	printf("--(!)Error loading body_cascade_name\n"); return -1;
+		//}
 
 		stringstream frame_ss;
-		stringstream ss;
 		if (!haveBackboard)
 		{
 			getGray(img,grayImage);											//Converts to a gray image.  All we need is a gray image for cv computing.
@@ -292,10 +291,10 @@ int main(int argc, const char** argv)
 												unionRect.size().width,
                                                 unionRect.size().height);
 
-						/*Rect offsetBackboard2 = Rect(unionRect.tl().x + 33,
-													unionRect.tl().y - 35,
-													unionRect.size().width,
-													unionRect.size().height);*/
+						//Rect offsetBackboard2 = Rect(unionRect.tl().x + 33,
+						//							unionRect.tl().y - 35,
+						//							unionRect.size().width,
+						//							unionRect.size().height);
 
 
 
@@ -321,8 +320,7 @@ int main(int argc, const char** argv)
 
 		///*******Start of main code to detect Basketball*************************
 		frame_ss << frameCount;
-		string frame_str = frame_ss.str();   //"frame" + ss.str();
-
+		string frame_str = frame_ss.str();
 		if (haveBackboard)
 		{
 			putText(bbsrc, "C",	bbCenterPosit,	FONT_HERSHEY_PLAIN, 1,	greenColor, 1, 0.5);
@@ -382,13 +380,13 @@ int main(int argc, const char** argv)
 			unsigned int totalLabeledPixels = cvLabel(segmentated, labelImg, blobs);
 
 			cvFilterByArea(blobs, 75/*25*/, 1000000); //25, 1000);
-//			cvRenderBlobs(labelImg, blobs, &iImg, &iImg, CV_BLOB_RENDER_BOUNDING_BOX);
-			cvUpdateTracks(blobs, tracks, 2. /*30.*/, /*5*/ 10, 2);
+			//cvRenderBlobs(labelImg, blobs, &iImg, &iImg, CV_BLOB_RENDER_BOUNDING_BOX);
+			cvUpdateTracks(blobs, tracks, 2., 10, 2);
 
 			unsigned left = 0, top = 0;
 			unsigned t_width = 0, t_height = 0;
 
-			vector<cv::Rect> trRects;
+			//vector<cv::Rect> trRects;
 			//for (CvTracks::const_iterator jt = tracks.begin(); jt!=tracks.end(); ++jt)
 			for (CvBlobs::const_iterator jt = blobs.begin(); jt!=blobs.end(); ++jt)
 			{
@@ -396,26 +394,26 @@ int main(int argc, const char** argv)
 			  top = jt->second->miny;
 			  t_width = jt->second->maxx - jt->second->minx;
 			  t_height = jt->second->maxy - jt->second->miny;
-			  cv::Rect localRect = cv::Rect(left, top, t_width, t_height);
-			  trRects.push_back(localRect);
-			  //rectangle(img, localRect.tl(), localRect.br(), blueColor, 2, 8, 0);
-			}
+			  ballRect = cv::Rect(left, top, t_width, t_height);
+			  rectangle(img, ballRect.tl(), ballRect.br(), orangeColor, 1, 8, 0);
+			  //trRects.push_back(localRect);
+			  //rectangle(img, localRect.tl(), localRect.br(), redColor, 1, 8, 0);
+///			}  // for (CvTracks::const_iterator jt)
 
-//			cvRenderTracks(tracks, &iImg, &iImg, CV_TRACK_RENDER_ID|CV_TRACK_RENDER_BOUNDING_BOX);
-
-			cvReleaseImage(&labelImg);
-			cvReleaseImage(&segmentated);
+			//cvRenderTracks(tracks, &iImg, &iImg, CV_TRACK_RENDER_ID|CV_TRACK_RENDER_BOUNDING_BOX);
 
 			//------------Track the basketball!!!!---------------
 
 			//Writes output to output array (basketballTracker)
 
-			unsigned int nTracks =  trRects.size();  //tracks.size();
-			if (nTracks > 0)
-			{
-				for (vector<cv::Rect>::iterator jt = trRects.begin(); jt!=trRects.end(); ++jt)
-				{
-					ballRect = *jt;
+			///unsigned int nTracks =  trRects.size();  //tracks.size();
+			///if (nTracks > 0)
+			///{
+///				for (vector<cv::Rect>::iterator jt = trRects.begin(); jt!=trRects.end(); ++jt)
+///				{
+					//ballRect = *jt;
+
+
 					if ( (ballRect.x > leftActiveBoundary)
 									&& (ballRect.x < rightActiveBoundary)
 									&& (ballRect.y > topActiveBoundary)
@@ -470,17 +468,17 @@ int main(int argc, const char** argv)
 
 				                    if (objectClass < classNamesVec.size())
 				                    {
-				                        ss.str("");
-				                        ss << confidence;
-				                        String conf(ss.str());
+				                        frame_ss.str("");
+				                        frame_ss << confidence;
+				                        String conf(frame_ss.str());
 				                        String label = String(classNamesVec[objectClass]) + ": " + conf;
 				                        int baseLine = 0;
 				                        Size labelSize = getTextSize(label, FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseLine);
-				                        /*rectangle(basketRoI, Rect(Point(xLeftBottom, yLeftBottom ),
-				                                              Size(labelSize.width, labelSize.height + baseLine)),
-				                                  Scalar(255, 255, 255), CV_FILLED);
-				                        putText(basketRoI, label, Point(xLeftBottom, yLeftBottom+labelSize.height),
-				                                FONT_HERSHEY_SIMPLEX, 0.5, Scalar(0,0,0));*/
+				                        //rectangle(basketRoI, Rect(Point(xLeftBottom, yLeftBottom ),
+				                        //                      Size(labelSize.width, labelSize.height + baseLine)),
+				                        //          Scalar(255, 255, 255), CV_FILLED);
+				                        //putText(basketRoI, label, Point(xLeftBottom, yLeftBottom+labelSize.height),
+				                        //        FONT_HERSHEY_SIMPLEX, 0.5, Scalar(0,0,0));
 				                    }
 				                    else
 				                    {
@@ -511,9 +509,10 @@ int main(int argc, const char** argv)
 						//---Start of using player position on halfcourt image to draw shot location-----
 						//---End of the process of identifying a shot at the basket!!!------------
 					}
-				}
+///				}  //for (vector<cv::Rect>::iterator jt)
+			}  // for (CvTracks::const_iterator jt)
 				///*******End of code to detect & select Basketball*************************
-			}
+			///}  //if (nTracks > 0)
 
 			//-- detect body
 			getGray(img,grayImage);			//Converts to a gray and blur image.  All we need is a gray image for cv computing.
@@ -525,7 +524,7 @@ int main(int argc, const char** argv)
 			IplImage* body_labelImg = cvCreateImage(S, IPL_DEPTH_LABEL, 1);
 			CvBlobs body_blobs;
 			unsigned int body_result = cvLabel(body_segmentated, body_labelImg, body_blobs);
-			cvShowImage("body_segmentated", body_segmentated);
+			//cvShowImage("body_segmentated", body_segmentated);
 			//cvFilterByArea(body_blobs, 250, 20000);
 			//cvRenderBlobs(body_labelImg, body_blobs, &iImg, &iImg, CV_BLOB_RENDER_BOUNDING_BOX);
 			cvUpdateTracks(body_blobs, body_tracks, 200., 1, 1);
@@ -558,10 +557,20 @@ int main(int argc, const char** argv)
 			  }
 			}
 
+
+//			if ((float) unionBodyRect.height < (float) (unionBodyRect.width*1.5))
+//				continue;
+
+//			if ( (unionBodyRect.height < 50) || (unionBodyRect.height > 275) )
+//				continue;
+
+			cout << frameCount << " : unionBodyRect=" << unionBodyRect << endl;
 			rectangle(img, unionBodyRect.tl(), unionBodyRect.br(), greenColor, 2, 8, 0);
 
 ///			int x_scale = 15;  int y_scale = 75;
 ///			body_cascade.detectMultiScale(grayImage, bodys, 1.02, 1, CV_HAAR_DO_CANNY_PRUNING, Size(x_scale, y_scale));
+
+
 
 			////for( int j = 0; j < (int) body_trRects.size(); j++ )
 			////{
@@ -571,11 +580,8 @@ int main(int argc, const char** argv)
 
 				double ballBodyDistance = euclideanDist(bodyCenter.x, bodyCenter.y, ballCenter.x, ballCenter.y);
 
-				if (ballBodyDistance > 60)
-				{
-//					cout << " too far away" << endl;
+				if (unionBodyRect.width > 100 || unionBodyRect.height > 350)
 					continue;
-				}
 
 				if (unionBodyRect.br().y < Backboard.br().y)
 				{
@@ -609,6 +615,13 @@ int main(int argc, const char** argv)
 				////ellipse( img, bodyCenter, Size( unionBodyRect.width*0.5, unionBodyRect.height*0.5), 0, 0, 360, aquaColor, 4, 8, 0 );
 				line(img, Point(BackboardCenterX, BackboardCenterY), bodyCenter, blueColor, 1, 8);
 
+				int eu_mid_x = (int) (BackboardCenterX + bodyCenter.x) * 0.5;
+				int eu_mid_y = (int) (BackboardCenterY + bodyCenter.y) * 0.5;
+				stringstream eu_ss;
+				eu_ss << euclidDistFromBB;
+				string eu_str = eu_ss.str();
+				putText(img, eu_str,Point(eu_mid_x - 5, eu_mid_y - 5), FONT_HERSHEY_PLAIN, 1, blueColor, 1, 0.5);
+
 
 				//stringstream idx_ss;
 				//idx_ss << j;
@@ -621,12 +634,12 @@ int main(int argc, const char** argv)
 				putText(img, bodyHgt_str,Point((int)unionBodyRect.x + unionBodyRect.width*0.5-5, (int)unionBodyRect.y + unionBodyRect.height*0.5-5), FONT_HERSHEY_PLAIN, 1, greenColor, 1, 0.5);
 
 
-				if (euclidDistFromBB > 135)
+				if (euclidDistFromBB > 250)
 				{
-					cout << frameCount <<": distBB 135+    heightNorm=" << heightNorm << endl;
+					//cout << frameCount <<": distBB 135+    heightNorm=" << heightNorm << endl;
 
 					newPlayerWindow.radiusIdx = radiusArray.size() * 0.99;
-					euclidDistFromBB += 120;
+					//euclidDistFromBB += 120;
 
 					int tempPlacement = (bbCenterPosit.x + radiusArray[newPlayerWindow.radiusIdx])
 									    - (bbCenterPosit.x - radiusArray[newPlayerWindow.radiusIdx]);
@@ -640,9 +653,9 @@ int main(int argc, const char** argv)
 
 					newPlayerWindow.placement = tempPlacement;
 				}
-				else if (euclidDistFromBB < 30)
+				else if (euclidDistFromBB < 100)
 				{
-					cout << frameCount <<": distBB -30 heightNorm=" << heightNorm << endl;
+					//cout << frameCount <<": distBB -30 heightNorm=" << heightNorm << endl;
 
 					int tempPlacement;
 					if (bodyCenter.x < BackboardCenterX)
@@ -656,8 +669,7 @@ int main(int argc, const char** argv)
 				}
 				else
 				{
-					cout << frameCount <<": ELSE  heightNorm=" << heightNorm << endl;
-
+					//cout << frameCount <<": ELSE  heightNorm=" << heightNorm << endl;
 
 					if (heightNorm < 0.5)    //NOTE:  If not true, then we have inaccurate calculation of body height from detectMultiscale method.  Do not estimate a player position for it.
 					{
@@ -681,15 +693,19 @@ int main(int argc, const char** argv)
 
 			rectangle(img, Backboard.tl(), Backboard.br(), redColor, 2, 8, 0);
 			circle(img, Point(BackboardCenterX, BackboardCenterY), 1, greenColor, 3);
+
 			stringstream iss;
 			iss << frameCount;
 			string i_str = iss.str();
+			putText(img, frame_str, Point(5, 20), FONT_HERSHEY_PLAIN, 2 , greenColor, 0.5);
 			imwrite("/home/fred/Temp/Temp/v23_stills/image" + i_str + ".jpg", img);
+
+			cvReleaseImage(&labelImg);
+			cvReleaseImage(&segmentated);
+			//trRects.clear();
 		}  //if (haveBackboard)
 
 		//Create string of frame counter to display on video window.
-		//string str = ss.str();   //"frame" + ss.str();
-		putText(img, frame_str, Point(5, 20), FONT_HERSHEY_PLAIN, 2 , greenColor, 0.5);   //, 2);
 		Mat left(finalImg, Rect(0, 0, img.cols, img.rows));
 		img.copyTo(left);
 		Mat right(finalImg, Rect(bbsrc.cols, 0, bbsrc.cols, bbsrc.rows));
