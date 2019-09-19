@@ -105,8 +105,6 @@ int main(int argc, const char** argv)
     Mat bbsrc 										= imread(bballFileName);	
 	int thresh 										= 85;
 	RNG rng(12345);
-	int backboardOffsetX;
-	int backboardOffsetY;
 	int newPlayerWindowSize 						= 50;
 	PlayerObs newPlayerWindow;
 	vector <int> radiusArray;
@@ -131,7 +129,7 @@ int main(int argc, const char** argv)
 	Scalar aquaColor								= Scalar (255, 140, 0);
 	Scalar rngColor = Scalar( rng.uniform(0, 255), rng.uniform(0, 255), rng.uniform(0, 255) );
 	bool haveBackboard 								= false;
-    vector<Rect> bodys;
+    //vector<Rect> bodys;
 	String body_cascade_name 						= "/home/fred/Pictures/OrgTrack_res/cascadeconfigs/haarcascade_fullbody.xml";
 	String modelBinary								= "/home/fred/Dev/DNN_models/MadeShots/V1/made_8200.weights";
 	String modelConfig								= "/home/fred/Dev/DNN_models/MadeShots/V1/made.cfg";
@@ -155,15 +153,14 @@ int main(int argc, const char** argv)
 	const string OUTNAME = "v4_output_longversion.mp4";
 	const string X_str = "x";
 	const string O_str = "o";
-	int body_height_sum = 0;
-	int body_height_max = 0;
 	Point body_max_tl, body_max_br;
-	float body_height_avg;
 	Point body_tl, body_br;
 	Point bodyCenter;
 
 
 	CvTracks tracks;
+	CvTracks body_tracks;
+	Rect unionRect;
 
 	if( !body_cascade.load( body_cascade_name ) )
 	{
@@ -228,9 +225,8 @@ int main(int argc, const char** argv)
 
 	IplConvKernel* morphKernel = cvCreateStructuringElementEx(5, 5, 1, 1, CV_SHAPE_RECT, NULL);
 
-	cv::Rect unionRect;
+	cv::Rect unionBodyRect;
 	bool isFirstPass = true;
-
 
     for(;;)
     {
@@ -258,11 +254,7 @@ int main(int argc, const char** argv)
 		stringstream ss;
 		if (!haveBackboard)
 		{
-	    	//frame_ss << frameCount;
-
 			getGray(img,grayImage);											//Converts to a gray image.  All we need is a gray image for cv computing.
-			blur(grayImage, grayImage, Size(3,3));							//Blurs, i.e. smooths, an image using the normalized box filter.  Used to reduce noise.
-
 			Canny(grayImage, grayImage, thresh, thresh*2, 3);
 			findContours( grayImage, boardContours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE, Point(0, 0) );
 			vector< vector<Point> > contours_poly( boardContours.size() );
@@ -295,8 +287,6 @@ int main(int argc, const char** argv)
         			}
 
         			if (frameCount > 99) {
-						backboardOffsetX = -unionRect.tl().x + img.size().width/2 - 13;
-						backboardOffsetY = -unionRect.tl().y + 30;
 						offsetBackboard = Rect(unionRect.tl().x,
 												unionRect.tl().y - 40,
 												unionRect.size().width,
@@ -335,11 +325,7 @@ int main(int argc, const char** argv)
 
 		if (haveBackboard)
 		{
-			putText(bbsrc, "C",
-					bbCenterPosit /*Point(BackboardCenterX, BackboardCenterY)*/,
-					FONT_HERSHEY_PLAIN, 1 ,
-					greenColor, 1,
-					0.5);   //, 2);
+			putText(bbsrc, "C",	bbCenterPosit,	FONT_HERSHEY_PLAIN, 1,	greenColor, 1, 0.5);
 
 	    	if (!semiCircleReady)
 	    	{
@@ -396,7 +382,7 @@ int main(int argc, const char** argv)
 			unsigned int totalLabeledPixels = cvLabel(segmentated, labelImg, blobs);
 
 			cvFilterByArea(blobs, 75/*25*/, 1000000); //25, 1000);
-			cvRenderBlobs(labelImg, blobs, &iImg, &iImg, CV_BLOB_RENDER_BOUNDING_BOX);
+//			cvRenderBlobs(labelImg, blobs, &iImg, &iImg, CV_BLOB_RENDER_BOUNDING_BOX);
 			cvUpdateTracks(blobs, tracks, 2. /*30.*/, /*5*/ 10, 2);
 
 			unsigned left = 0, top = 0;
@@ -410,10 +396,12 @@ int main(int argc, const char** argv)
 			  top = jt->second->miny;
 			  t_width = jt->second->maxx - jt->second->minx;
 			  t_height = jt->second->maxy - jt->second->miny;
-			  trRects.push_back(cv::Rect(left, top, t_width, t_height));
+			  cv::Rect localRect = cv::Rect(left, top, t_width, t_height);
+			  trRects.push_back(localRect);
+			  //rectangle(img, localRect.tl(), localRect.br(), blueColor, 2, 8, 0);
 			}
 
-			cvRenderTracks(tracks, &iImg, &iImg, CV_TRACK_RENDER_ID|CV_TRACK_RENDER_BOUNDING_BOX);
+//			cvRenderTracks(tracks, &iImg, &iImg, CV_TRACK_RENDER_ID|CV_TRACK_RENDER_BOUNDING_BOX);
 
 			cvReleaseImage(&labelImg);
 			cvReleaseImage(&segmentated);
@@ -528,34 +516,60 @@ int main(int argc, const char** argv)
 			}
 
 			//-- detect body
-			getGray(img,grayImage);											//Converts to a gray image.  All we need is a gray image for cv computing.
-			//blur(grayImage, grayImage, Size(3,3));							//Blurs, i.e. smooths, an image using the normalized box filter.  Used to reduce noise.
-			//body_cascade.detectMultiScale(grayImage, bodys, 1.05, 1, 18|9|CASCADE_SCALE_IMAGE, Size(3,7));  //Detects object of different sizes in the input image.
-																											 //This detector is looking for human bodies with min Size(3, 7) in a VGA image.
-			//body_cascade.detectMultiScale(grayImage, bodys, 1.02, 2, 0|CV_HAAR_SCALE_IMAGE, Size(55,55));
-			//int x_scale = 30;  int y_scale = 70;
-			int x_scale = 15;  int y_scale = 75;
-			//body_cascade.detectMultiScale(grayImage, bodys, 1.02, 1, 0|CV_HAAR_SCALE_IMAGE, Size(x_scale, y_scale));
-			body_cascade.detectMultiScale(grayImage, bodys, 1.02, 1, CV_HAAR_DO_CANNY_PRUNING, Size(x_scale, y_scale));
-			//ss << frameCount;
-			/*int oneBodyStart=0, oneBodyEnd=0;
-            if (bodys.size() > 0)
-            {
-            	oneBodyEnd = bodys.size()-1;
-            	oneBodyStart = oneBodyEnd-1;
-            }*/
+			getGray(img,grayImage);			//Converts to a gray and blur image.  All we need is a gray image for cv computing.
+			bg_model->apply(grayImage, fgmask);
+			//imshow("fgmask", fgmask);
 
+			IplImage *body_segmentated = new IplImage(fgmask);
+			//cvMorphologyEx(body_segmentated, body_segmentated, NULL, morphKernel, CV_MOP_OPEN, 1);
+			IplImage* body_labelImg = cvCreateImage(S, IPL_DEPTH_LABEL, 1);
+			CvBlobs body_blobs;
+			unsigned int body_result = cvLabel(body_segmentated, body_labelImg, body_blobs);
+			cvShowImage("body_segmentated", body_segmentated);
+			//cvFilterByArea(body_blobs, 250, 20000);
+			//cvRenderBlobs(body_labelImg, body_blobs, &iImg, &iImg, CV_BLOB_RENDER_BOUNDING_BOX);
+			cvUpdateTracks(body_blobs, body_tracks, 200., 1, 1);
+			//cvRenderTracks(body_tracks, &iImg, &iImg, CV_TRACK_RENDER_ID|CV_TRACK_RENDER_BOUNDING_BOX);
 
-			for( int j = 0 /*oneBodyStart*/; j < /*oneBodyEnd*/ (int) bodys.size(); j++ )
+			bool firstRect = true;
+			vector<cv::Rect> body_trRects;
+			//for (CvTracks::const_iterator jt = body_tracks.begin(); jt!=body_tracks.end(); ++jt)
+			for (CvBlobs::const_iterator jt = body_blobs.begin(); jt!=body_blobs.end(); ++jt)
 			{
-				Point bodyCenter( bodys[j].x + bodys[j].width*0.5, bodys[j].y + bodys[j].height*0.5 );
+			  left = jt->second->minx;
+			  top = jt->second->miny;
+			  t_width = jt->second->maxx - jt->second->minx;
+			  t_height = jt->second->maxy - jt->second->miny;
+			  float f_width = (float) t_width;
+			  float f_height = (float) t_height;
+			  cv::Rect localRect = cv::Rect(left, top, t_width, t_height);
+			  if ( f_height > (f_width*1.5) )
+			  {
+				  if (firstRect)
+				  {
+					  unionBodyRect = localRect;
+					  firstRect = false;
+				  }
+				  else
+				  {
+					  unionBodyRect = unionBodyRect | localRect;
+				  }
+				  body_trRects.push_back(localRect);
+			  }
+			}
+
+			rectangle(img, unionBodyRect.tl(), unionBodyRect.br(), greenColor, 2, 8, 0);
+
+///			int x_scale = 15;  int y_scale = 75;
+///			body_cascade.detectMultiScale(grayImage, bodys, 1.02, 1, CV_HAAR_DO_CANNY_PRUNING, Size(x_scale, y_scale));
+
+			////for( int j = 0; j < (int) body_trRects.size(); j++ )
+			////{
+				Point bodyCenter( unionBodyRect.x + unionBodyRect.width*0.5, unionBodyRect.y + unionBodyRect.height*0.5 );
 				//-----------Identifying player height and position!!--------------
 				Point ballCenter( (ballRect.x + ballRect.width* 0.5), (ballRect.y + ballRect.height * 0.5));
 
 				double ballBodyDistance = euclideanDist(bodyCenter.x, bodyCenter.y, ballCenter.x, ballCenter.y);
-//				cout << "frameCount=" << frameCount << "   j=" << j << "   ballBodyDistance=" << ballBodyDistance
-//				     << "   body(" << bodyCenter.x << "," << bodyCenter.y << ")"
-//					 << "   ball(" << ballCenter.x << "," << ballCenter.y << ")";
 
 				if (ballBodyDistance > 60)
 				{
@@ -563,59 +577,19 @@ int main(int argc, const char** argv)
 					continue;
 				}
 
-				if (bodys[j].br().y < Backboard.br().y)
+				if (unionBodyRect.br().y < Backboard.br().y)
 				{
 //					cout << " false body by Backboard" << endl;
 					continue;
 				}
 
-				Rect bodyRect = Rect(bodys[j].tl(), bodys[j].br());
+				Rect bodyRect = Rect(unionBodyRect.tl(), unionBodyRect.br());
 				Rect badBodyIntersect = Backboard & bodyRect;
 				if (badBodyIntersect.area() > (0.6 * bodyRect.area()))
 				{
 //					cout << " false body2 by Backboard" << endl;
 					continue;
 				}
-
-				//Point bodyCenter( bodys[j].x + bodys[j].width*0.5, bodys[j].y + bodys[j].height*0.5 );
-				//rectangle(img, bodys[j].tl(), bodys[j].br(), greenColor, 2, 8, 0);
-				/*body_height_sum += bodys[j].height;
-				body_tl.x += bodys[j].tl().x;
-				body_tl.y += bodys[j].tl().y;
-				body_br.x += bodys[j].br().x;
-				body_br.y += bodys[j].br().x;
-
-				if (bodys[j].height > body_height_max)
-				{
-					body_height_max = bodys[j].height;
-					body_max_tl = bodys[j].tl();
-					body_max_br = bodys[j].br();
-				}*/
-
-				/*int framePeriod = 10;
-				if (frameCount % framePeriod == 0)
-				{
-					cout << frameCount << " : body_height_max=" << body_height_max << endl;
-					float hor_distance_tl = body_max_tl.x - Backboard.tl().x;
-					float hor_distance_br = body_max_br.x - Backboard.tl().x;
-
-					body_tl.x = (int) body_tl.x / framePeriod;
-					body_tl.y = (int) body_tl.y / framePeriod;
-					body_br.x = (int) body_br.x / framePeriod;
-					body_br.y = (int) body_br.y / framePeriod;
-					body_height_avg = (float) body_height_sum / framePeriod;
-					//cout << frameCount << " : body_height_max=" << body_height_max << " : body_avg=" << body_height_avg << endl;
-					//cout << "              hor_distance_tl= " << hor_distance_tl << "    hor_distance_br=" << hor_distance_br << endl;
-					rectangle(img, body_max_tl, body_max_br, greenColor, 2, 8, 0);
-
-					Point bodyLocal( (body_max_tl.x + body_max_br.x)*0.5, (body_max_tl.y + body_max_br.y)*0.5 );
-					bodyCenter = bodyLocal;
-
-					body_height_sum = 0; body_tl = Point(0,0); body_br = Point(0,0);
-					body_height_max = 0;
-				}*/
-				//cout << frameCount << " : body[" << j << "].height=" << bodys[j].height << endl;
-
 
 				//--- Start of adjusting player position on image of half court!!!-----
 				newPlayerWindow.frameCount = frameCount;
@@ -630,29 +604,25 @@ int main(int argc, const char** argv)
 				double xDistFromBB = oneDDist(BackboardCenterX, bodyCenter.x);
 				double yDistFromBB = oneDDist(BackboardCenterY, bodyCenter.y);
 
-				float heightNorm = (float) bodys[j].height / 350.0f;
+				float heightNorm = (float) unionBodyRect.height / 350.0f;
 
-				//				cout << "draw ellipse" << endl;
-				ellipse( img, bodyCenter, Size( bodys[j].width*0.5, bodys[j].height*0.5), 0, 0, 360, aquaColor, 4, 8, 0 );
+				////ellipse( img, bodyCenter, Size( unionBodyRect.width*0.5, unionBodyRect.height*0.5), 0, 0, 360, aquaColor, 4, 8, 0 );
 				line(img, Point(BackboardCenterX, BackboardCenterY), bodyCenter, blueColor, 1, 8);
 
 
-				stringstream idx_ss;
-				idx_ss << j;
-				string idx_str = idx_ss.str();
-				putText(img, idx_str,Point((int)bodys[j].x + bodys[j].width*0.5-5, (int)bodys[j].y-5), FONT_HERSHEY_PLAIN, 1, aquaColor, 1, 0.5);
+				//stringstream idx_ss;
+				//idx_ss << j;
+				//string idx_str = idx_ss.str();
+				//putText(img, idx_str,Point((int)unionBodyRect.x + unionBodyRect.width*0.5-5, (int)unionBodyRect.y-5), FONT_HERSHEY_PLAIN, 1, aquaColor, 1, 0.5);
 
 				stringstream hss;
-				hss << bodys[j].height;
+				hss << unionBodyRect.height;
 				string bodyHgt_str = hss.str();
-				putText(img, bodyHgt_str,Point((int)bodys[j].x + bodys[j].width*0.5-5, (int)bodys[j].y + bodys[j].height*0.5-5), FONT_HERSHEY_PLAIN, 1, aquaColor, 1, 0.5);
+				putText(img, bodyHgt_str,Point((int)unionBodyRect.x + unionBodyRect.width*0.5-5, (int)unionBodyRect.y + unionBodyRect.height*0.5-5), FONT_HERSHEY_PLAIN, 1, greenColor, 1, 0.5);
 
 
 				if (euclidDistFromBB > 135)
 				{
-					/*cout << frameCount << ": distBB-135+ =" << euclidDistFromBB << "   xDistFromBB=" << xDistFromBB
-							           << "   yDistFromBB=" << yDistFromBB
-									   << "   bodys[j].height=" << bodys[j].height << endl;*/
 					cout << frameCount <<": distBB 135+    heightNorm=" << heightNorm << endl;
 
 					newPlayerWindow.radiusIdx = radiusArray.size() * 0.99;
@@ -672,9 +642,6 @@ int main(int argc, const char** argv)
 				}
 				else if (euclidDistFromBB < 30)
 				{
-					/*cout << frameCount << ": distFromBB30-=" << euclidDistFromBB << "   xDistFromBB=" << xDistFromBB
-							           << "   yDistFromBB=" << yDistFromBB
-									   << "   bodys[j].height=" << bodys[j].height << endl;*/
 					cout << frameCount <<": distBB -30 heightNorm=" << heightNorm << endl;
 
 					int tempPlacement;
@@ -689,9 +656,6 @@ int main(int argc, const char** argv)
 				}
 				else
 				{
-					/*cout << frameCount << ": euclidDistFromBB=" << euclidDistFromBB << "   xDistFromBB=" << xDistFromBB
-							           << "   yDistFromBB=" << yDistFromBB
-									   << "   ****bodys[j].height=" << bodys[j].height << endl;*/
 					cout << frameCount <<": ELSE  heightNorm=" << heightNorm << endl;
 
 
@@ -713,7 +677,7 @@ int main(int argc, const char** argv)
 					}
 				}
 				//--- End of adjusting player position on image of half court!!!-----
-			}
+			////}
 
 			rectangle(img, Backboard.tl(), Backboard.br(), redColor, 2, 8, 0);
 			circle(img, Point(BackboardCenterX, BackboardCenterY), 1, greenColor, 3);
@@ -748,6 +712,7 @@ int main(int argc, const char** argv)
 }
 
 
+//Blurs, i.e. smooths, an image using the normalized box filter.  Used to reduce noise.
 void getGray(const Mat& image, Mat& gray)
 {
     if (image.channels()  == 3)
@@ -756,6 +721,8 @@ void getGray(const Mat& image, Mat& gray)
         cv::cvtColor(image, gray, COLOR_BGRA2GRAY);
     else if (image.channels() == 1)
         gray = image;
+
+    blur(gray, gray, Size(3,3));
 }
 
 double DistanceToCamera(double knownWidth, double focalLength, double perWidth) {
