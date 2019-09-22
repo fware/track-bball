@@ -122,6 +122,7 @@ int main(int argc, const char** argv)
 	Rect ballRect;				//Represents the box around the trackable basketball
 	vector< vector<Point> > boardContours;	
 	Scalar greenColor 								= Scalar (0, 215, 0);
+	Scalar color1    							    = Scalar (25, 0, 51);
 	Scalar redColor 								= Scalar (0, 0, 215);
 	Scalar blueColor								= Scalar (215, 0, 0);
 	Scalar blackColor								= Scalar (40, 40, 40);
@@ -157,10 +158,11 @@ int main(int argc, const char** argv)
 	Point body_tl, body_br;
 	Point bodyCenter;
 
-
 	CvTracks tracks;
 	CvTracks body_tracks;
 	Rect unionRect;
+	vector<int> hgtArray;
+	float hgtAvg = 0.0;
 
 	if( !body_cascade.load( body_cascade_name ) )
 	{
@@ -302,7 +304,6 @@ int main(int argc, const char** argv)
 
 		                bbCenterPosit = semiCircleCenterPt;  // Coords for halfcourt shot chart image
         				Backboard = unionRect;   //Coords for true video content
-
         				BackboardCenterX = (Backboard.tl().x+(Backboard.width*3/4));   // (Backboard.tl().x+(Backboard.width/2));
         				BackboardCenterY = (Backboard.tl().y+(Backboard.height*3/4));    // (Backboard.tl().y+(Backboard.height/2));
         				//BackboardCenterX = (offsetBackboard2.tl().x + (offsetBackboard2.width/2));
@@ -323,7 +324,7 @@ int main(int argc, const char** argv)
 		string frame_str = frame_ss.str();
 		if (haveBackboard)
 		{
-			putText(bbsrc, "C",	bbCenterPosit,	FONT_HERSHEY_PLAIN, 1,	greenColor, 1, 0.5);
+			putText(bbsrc, "C",	bbCenterPosit,	FONT_HERSHEY_PLAIN, 1,	greenColor, 2, 0.5);
 
 	    	if (!semiCircleReady)
 	    	{
@@ -498,7 +499,7 @@ int main(int argc, const char** argv)
 
 							if (haveBackboard && frameCount > frameWindow)
 							{
-								frameWindow = frameCount + 10;
+								frameWindow = frameCount + 75;  // 10;
 								//circle(bbsrc, courtArc[newPlayerWindow.radiusIdx][newPlayerWindow.placement], 1, Scalar(0, 165, 255), 3);
 								//putText(bbsrc, O_str, courtArc[newPlayerWindow.radiusIdx][newPlayerWindow.placement], FONT_HERSHEY_PLAIN, 1 , greenColor, 1, LINE_4);   //, 2);
 								Point offPt = Point(courtArc[newPlayerWindow.radiusIdx][newPlayerWindow.placement].x-5, courtArc[newPlayerWindow.radiusIdx][newPlayerWindow.placement].y-5);
@@ -558,13 +559,34 @@ int main(int argc, const char** argv)
 			}
 
 
-//			if ((float) unionBodyRect.height < (float) (unionBodyRect.width*1.5))
-//				continue;
+			hgtArray.push_back(unionBodyRect.height);
+			if (frameCount > 120)    //We start collecting stats at frame 100 and must collect at 20 measures to start the calculation
+			{
+				if (frameCount % 20 == 0)
+				{
+					sort(hgtArray.begin(), hgtArray.end());
+					hgtArray.erase (hgtArray.begin());
+					hgtArray.erase (hgtArray.end()-1);
 
-//			if ( (unionBodyRect.height < 50) || (unionBodyRect.height > 275) )
-//				continue;
+					int hgtSum = 0;
+					for (vector<int>::iterator jt = hgtArray.begin(); jt!=hgtArray.end(); ++jt)
+						hgtSum += *jt;
 
-			cout << frameCount << " : unionBodyRect=" << unionBodyRect << endl;
+					hgtAvg = (float) hgtSum / (float) hgtArray.size();
+
+					hgtArray.erase(hgtArray.begin(), hgtArray.end());
+				}
+			}
+
+
+			if ((float) unionBodyRect.height < (float) (unionBodyRect.width*1.5))
+				continue;
+
+			if ( (unionBodyRect.height < 50) || (unionBodyRect.height > 275) )
+				continue;
+
+			//cout << frameCount << " : bodyHeight=" << unionBodyRect.height << "   bodyHeightAverage=" << hgtAvg << endl;
+			//cout << frameCount << "   bodyHeightAverage=" << hgtAvg << endl;
 			rectangle(img, unionBodyRect.tl(), unionBodyRect.br(), greenColor, 2, 8, 0);
 
 ///			int x_scale = 15;  int y_scale = 75;
@@ -602,7 +624,7 @@ int main(int argc, const char** argv)
 				newPlayerWindow.activeValue = 1;
 				newPlayerWindow.position = bodyCenter;
 
-				double euclidDistFromBB = euclideanDist((double) BackboardCenterX,
+				int euclidDistFromBB = euclideanDist((double) BackboardCenterX,
 												  (double) BackboardCenterY,
 												  (double) bodyCenter.x,
 												  (double) bodyCenter.y);
@@ -610,7 +632,7 @@ int main(int argc, const char** argv)
 				double xDistFromBB = oneDDist(BackboardCenterX, bodyCenter.x);
 				double yDistFromBB = oneDDist(BackboardCenterY, bodyCenter.y);
 
-				float heightNorm = (float) unionBodyRect.height / 350.0f;
+				float heightNorm = (float) unionBodyRect.height / 375.0f;
 
 				////ellipse( img, bodyCenter, Size( unionBodyRect.width*0.5, unionBodyRect.height*0.5), 0, 0, 360, aquaColor, 4, 8, 0 );
 				line(img, Point(BackboardCenterX, BackboardCenterY), bodyCenter, blueColor, 1, 8);
@@ -619,8 +641,17 @@ int main(int argc, const char** argv)
 				int eu_mid_y = (int) (BackboardCenterY + bodyCenter.y) * 0.5;
 				stringstream eu_ss;
 				eu_ss << euclidDistFromBB;
-				string eu_str = eu_ss.str();
-				putText(img, eu_str,Point(eu_mid_x - 5, eu_mid_y - 5), FONT_HERSHEY_PLAIN, 1, blueColor, 1, 0.5);
+				stringstream x_ss;
+				int xDistLabel;
+				if (BackboardCenterX - bodyCenter.x > 0)
+					xDistLabel = -xDistFromBB;
+				else
+					xDistLabel = xDistFromBB;
+				x_ss << xDistLabel;
+				stringstream y_ss;
+				y_ss << yDistFromBB;
+				string full_str = eu_ss.str() + " (" + x_ss.str() + "," + y_ss.str() + ")";
+				putText(img, full_str,Point(eu_mid_x - 15, eu_mid_y - 5), FONT_HERSHEY_PLAIN, 1, blueColor, 2, 0.5);
 
 
 				//stringstream idx_ss;
@@ -631,7 +662,13 @@ int main(int argc, const char** argv)
 				stringstream hss;
 				hss << unionBodyRect.height;
 				string bodyHgt_str = hss.str();
-				putText(img, bodyHgt_str,Point((int)unionBodyRect.x + unionBodyRect.width*0.5-5, (int)unionBodyRect.y + unionBodyRect.height*0.5-5), FONT_HERSHEY_PLAIN, 1, greenColor, 1, 0.5);
+				stringstream havg_ss;
+				havg_ss << (int) hgtAvg;
+				string havg_str = havg_ss.str();
+				//putText(img, bodyHgt_str,Point((int)unionBodyRect.x + unionBodyRect.width*0.5-5, (int)unionBodyRect.y + unionBodyRect.height*0.5-5), FONT_HERSHEY_PLAIN, 1, greenColor, 1, 0.5);
+				putText(img, havg_str,Point((int)unionBodyRect.x + unionBodyRect.width*0.5-10,
+											(int)unionBodyRect.y + unionBodyRect.height*0.5),
+										FONT_HERSHEY_PLAIN, 1, greenColor, 2, 0.5);
 
 
 				if (euclidDistFromBB > 250)
@@ -692,13 +729,22 @@ int main(int argc, const char** argv)
 			////}
 
 			rectangle(img, Backboard.tl(), Backboard.br(), redColor, 2, 8, 0);
+
+			/*basketHeight = unionRect.height * 3 / 4;
+			left_x = Backboard.br().x - Backboard.width;
+			left_y = Backboard.br().y - (unionRect.height * 3 / 4);
+			right_x = Backboard.br().x;
+			right_y = left_y;*/
+
+			line(img, Point(Backboard.br().x - Backboard.width,  Backboard.br().y - (unionRect.height * 1 / 3) ),
+					  Point(Backboard.br().x, Backboard.br().y - (unionRect.height * 1 / 3) ), blueColor, 1, 8);
 			circle(img, Point(BackboardCenterX, BackboardCenterY), 1, greenColor, 3);
 
 			stringstream iss;
 			iss << frameCount;
 			string i_str = iss.str();
 			putText(img, frame_str, Point(5, 20), FONT_HERSHEY_PLAIN, 2 , greenColor, 0.5);
-			imwrite("/home/fred/Temp/Temp/v23_stills/image" + i_str + ".jpg", img);
+			imwrite("/home/fred/Temp/Temp/temp/image" + i_str + ".jpg", img);
 
 			cvReleaseImage(&labelImg);
 			cvReleaseImage(&segmentated);
