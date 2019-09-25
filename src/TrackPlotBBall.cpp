@@ -99,7 +99,7 @@ int main(int argc, const char** argv)
 
     help();
 	int frameCount 									= 0;
-	int frameWindow									= 0;
+	//int frameWindow									= 0;
 	const string bballPatternFile 					= "/home/fred/Pictures/OrgTrack_res/bball3_vga.jpg";
 	Mat patternImage 								= imread(bballPatternFile);
 	const string bballFileName 						= "/home/fred/Pictures/OrgTrack_res/bball-half-court-vga.jpeg";
@@ -128,7 +128,7 @@ int main(int argc, const char** argv)
 	//Scalar blackColor								= Scalar (40, 40, 40);
 	Scalar orangeColor								= Scalar (0, 140, 255);
 	//Scalar aquaColor								= Scalar (255, 140, 0);
-	Scalar rngColor = Scalar( rng.uniform(0, 255), rng.uniform(0, 255), rng.uniform(0, 255) );
+	//Scalar rngColor = Scalar( rng.uniform(0, 255), rng.uniform(0, 255), rng.uniform(0, 255) );
 	bool haveBackboard 								= false;
     //vector<Rect> bodys;
 	String modelBinary								= "/home/fred/Dev/DNN_models/MadeShots/V1/made_8200.weights";
@@ -195,10 +195,8 @@ int main(int argc, const char** argv)
         return -1;
 	}
 
-    //int ex = static_cast<int>(cap.get(CAP_PROP_FOURCC));     // Get Codec Type- Int form
     Size S = Size((int) cap.get(CAP_PROP_FRAME_WIDTH),    // Acquire input size
                   (int) cap.get(CAP_PROP_FRAME_HEIGHT));
-    //cout << "S=" << S << endl;
 	if (S.width > 640)
 	{
 		sizeFlag = true;
@@ -206,9 +204,6 @@ int main(int argc, const char** argv)
 		resize(firstFrame, firstFrame, S);
 		resize(bbsrc, bbsrc, S);
 	}
-	//Size outS = Size ((int) 2 * S.width, S.height);
-	//VideoWriter outputVideo;
-	//outputVideo.open(OUTNAME, ex, cap.get(CAP_PROP_FPS), outS, true);
 	Mat finalImg(S.height, S.width+S.width, CV_8UC3);
 
 	leftActiveBoundary 			= firstFrame.cols/4;  
@@ -226,7 +221,6 @@ int main(int argc, const char** argv)
 
 	cv::Rect unionBodyRect;
 	bool isFirstPass = true;
-
 
 	// Initialize the shotWindow with dummy values
 	for (int i=0; i<105; i++)
@@ -290,21 +284,23 @@ int main(int argc, const char** argv)
 												unionRect.size().width,
                                                 unionRect.size().height);
 
-						//Rect offsetBackboard2 = Rect(unionRect.tl().x + 33,
-						//							unionRect.tl().y - 35,
-						//							unionRect.size().width,
-						//							unionRect.size().height);
-
-
-
 						Point semiCircleCenterPt( (offsetBackboard.tl().x+offsetBackboard.width/2) , (offsetBackboard.tl().y + offsetBackboard.height/2) );
 
 		                bbCenterPosit = semiCircleCenterPt;  // Coords for halfcourt shot chart image
-        				Backboard = unionRect;   //Coords for true video content
+
+		    			line(img, Point(Backboard.br().x - Backboard.width,  Backboard.br().y - (unionRect.height * 1 / 3) ),
+		    					  Point(Backboard.br().x, Backboard.br().y - (unionRect.height * 1 / 3) ), blueColor, 1, 8);
+
+        				//Coords in true video content
+		                Backboard = Rect( Point(unionRect.br().x - unionRect.width,  unionRect.br().y - (unionRect.height * 1 / 3) ),
+		                				  unionRect.br() );
+
         				BackboardCenterX = (Backboard.tl().x+(Backboard.width*3/4));   // (Backboard.tl().x+(Backboard.width/2));
         				BackboardCenterY = (Backboard.tl().y+(Backboard.height*3/4));    // (Backboard.tl().y+(Backboard.height/2));
-        				//BackboardCenterX = (offsetBackboard2.tl().x + (offsetBackboard2.width/2));
-        				//BackboardCenterY = (offsetBackboard2.tl().y + (offsetBackboard2.height/2));
+
+
+
+
         				haveBackboard = true;
         			}
 
@@ -326,7 +322,7 @@ int main(int argc, const char** argv)
 	    	if (!semiCircleReady)
 	    	{
 	    		int radiusIdx = 0;
-	    		for (int radius = 40; radius < 320; radius += 20)   //Radius for euclidDistFromBB
+	    		for (int radius = 40; radius < 280; radius += 20)   //Radius for euclidDistFromBB
 	    		{
 	    			radiusArray.push_back(radius);
 
@@ -334,7 +330,6 @@ int main(int argc, const char** argv)
 	    			int yval;
 	    			for (int j = (bbCenterPosit.x - radius); j <= (bbCenterPosit.x + radius); j++)   //Using Pythagorean's theorem to find positions on each court arc.
 	    			{
-//	    				cout << "radiusIdx=" << radiusIdx << "   j=" << j << endl;
 	    				temp1 = radius * radius;
 	    				temp2 = (j - bbCenterPosit.x) * (j - bbCenterPosit.x);
 	    				temp3 = temp1 - temp2;
@@ -374,19 +369,14 @@ int main(int argc, const char** argv)
 			cvMorphologyEx(segmentated, segmentated, NULL, morphKernel, CV_MOP_OPEN, 1);
 
 			IplImage *labelImg = cvCreateImage(cvGetSize(&iImg), IPL_DEPTH_LABEL, 1);
-
 			CvBlobs blobs;
 			cvLabel(segmentated, labelImg, blobs);
-
 			cvFilterByArea(blobs, 75/*25*/, 1000000); //25, 1000);
-			//cvRenderBlobs(labelImg, blobs, &iImg, &iImg, CV_BLOB_RENDER_BOUNDING_BOX);
 			cvUpdateTracks(blobs, tracks, 2., 10, 2);
 
 			unsigned left = 0, top = 0;
 			unsigned t_width = 0, t_height = 0;
 
-			//vector<cv::Rect> trRects;
-			//for (CvTracks::const_iterator jt = tracks.begin(); jt!=tracks.end(); ++jt)
 			for (CvBlobs::const_iterator jt = blobs.begin(); jt!=blobs.end(); ++jt)
 			{
 				left = jt->second->minx;
@@ -395,8 +385,6 @@ int main(int argc, const char** argv)
 				t_height = jt->second->maxy - jt->second->miny;
 				ballRect = cv::Rect(left, top, t_width, t_height);
 				rectangle(img, ballRect.tl(), ballRect.br(), orangeColor, 1, 8, 0);
-				//trRects.push_back(localRect);
-				//rectangle(img, localRect.tl(), localRect.br(), redColor, 1, 8, 0);
 
 				//------------Track the basketball!!!!---------------
 				if ( (ballRect.x > leftActiveBoundary)
@@ -410,8 +398,6 @@ int main(int argc, const char** argv)
 					//---Start of the process of identifying a shot at the basket!!!------------
 					if (objIntersect.area() > 0)
 					{
-						//putText(bbsrc, X_str, courtArc[newPlayerWindow.radiusIdx][newPlayerWindow.placement], FONT_HERSHEY_PLAIN, 1 , redColor, 1, LINE_4);   //, 2);
-
 						//Predict a made shot
 						Mat basketRoI = img(Backboard).clone();
 						//resize(basketRoI, basketRoI, Size(416,416));
@@ -457,13 +443,6 @@ int main(int argc, const char** argv)
 									frame_ss << confidence;
 									String conf(frame_ss.str());
 									String label = String(classNamesVec[objectClass]) + ": " + conf;
-									//int baseLine = 0;
-									//Size labelSize = getTextSize(label, FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseLine);
-									//rectangle(basketRoI, Rect(Point(xLeftBottom, yLeftBottom ),
-									//                      Size(labelSize.width, labelSize.height + baseLine)),
-									//          Scalar(255, 255, 255), CV_FILLED);
-									//putText(basketRoI, label, Point(xLeftBottom, yLeftBottom+labelSize.height),
-									//        FONT_HERSHEY_SIMPLEX, 0.5, Scalar(0,0,0));
 								}
 								else
 								{
@@ -476,7 +455,6 @@ int main(int argc, const char** argv)
 								}
 							}
 						}
-						//imshow("YOLO: Detections", basketRoI);
 						//********End of Shot Prediction **********
 
 						//---Start of using player position on halfcourt image to draw shot location-----
@@ -484,10 +462,7 @@ int main(int argc, const char** argv)
 						if (haveBackboard) // && frameCount > frameWindow)
 						{
 							//frameWindow = frameCount + 75;  // 10;
-							//circle(bbsrc, courtArc[newPlayerWindow.radiusIdx][newPlayerWindow.placement], 1, Scalar(0, 165, 255), 3);
-							//putText(bbsrc, O_str, courtArc[newPlayerWindow.radiusIdx][newPlayerWindow.placement], FONT_HERSHEY_PLAIN, 1 , greenColor, 1, LINE_4);   //, 2);
-							Point offPt = Point(courtArc[newPlayerWindow.radiusIdx][newPlayerWindow.placement].x-5, courtArc[newPlayerWindow.radiusIdx][newPlayerWindow.placement].y-5);
-							//putText(bbsrc, frame_str, offPt, FONT_HERSHEY_PLAIN, 1 , rngColor, 1, 0.5);   //, 2);
+							//Point offPt = Point(courtArc[newPlayerWindow.radiusIdx][newPlayerWindow.placement].x-5, courtArc[newPlayerWindow.radiusIdx][newPlayerWindow.placement].y-5);
 							putText(bbsrc, X_str, courtArc[newPlayerWindow.radiusIdx][newPlayerWindow.placement], FONT_HERSHEY_PLAIN, 1 , redColor, 1, LINE_4);   //, 2);
 						}
 					}
@@ -500,22 +475,15 @@ int main(int argc, const char** argv)
 			//-- detect body
 			getGray(img,grayImage);			//Converts to a gray and blur image.  All we need is a gray image for cv computing.
 			bg_model->apply(grayImage, fgmask);
-			//imshow("fgmask", fgmask);
 
 			IplImage *body_segmentated = new IplImage(fgmask);
-			//cvMorphologyEx(body_segmentated, body_segmentated, NULL, morphKernel, CV_MOP_OPEN, 1);
 			IplImage* body_labelImg = cvCreateImage(S, IPL_DEPTH_LABEL, 1);
 			CvBlobs body_blobs;
 			cvLabel(body_segmentated, body_labelImg, body_blobs);
-			//cvShowImage("body_segmentated", body_segmentated);
-			//cvFilterByArea(body_blobs, 250, 20000);
-			//cvRenderBlobs(body_labelImg, body_blobs, &iImg, &iImg, CV_BLOB_RENDER_BOUNDING_BOX);
 			cvUpdateTracks(body_blobs, body_tracks, 200., 1, 1);
-			//cvRenderTracks(body_tracks, &iImg, &iImg, CV_TRACK_RENDER_ID|CV_TRACK_RENDER_BOUNDING_BOX);
 
 			bool firstRect = true;
 			vector<cv::Rect> body_trRects;
-			//for (CvTracks::const_iterator jt = body_tracks.begin(); jt!=body_tracks.end(); ++jt)
 			for (CvBlobs::const_iterator jt = body_blobs.begin(); jt!=body_blobs.end(); ++jt)
 			{
 			  left = jt->second->minx;
@@ -540,7 +508,6 @@ int main(int argc, const char** argv)
 			  }
 			}
 
-
 			hgtArray.push_back(unionBodyRect.height);
 			if (frameCount > 120)    //We start collecting stats at frame 100 and must collect at 20 measures to start the calculation
 			{
@@ -560,7 +527,6 @@ int main(int argc, const char** argv)
 				}
 			}
 
-
 			if ((float) unionBodyRect.height < (float) (unionBodyRect.width*1.5))
 				continue;
 
@@ -569,27 +535,20 @@ int main(int argc, const char** argv)
 
 			rectangle(img, unionBodyRect.tl(), unionBodyRect.br(), greenColor, 2, 8, 0);
 
-			Point bodyCenter( unionBodyRect.x + unionBodyRect.width*0.5, unionBodyRect.y + unionBodyRect.height*0.5 );
 			//-----------Identifying player height and position!!--------------
+			Point bodyCenter( unionBodyRect.x + unionBodyRect.width*0.5, unionBodyRect.y + unionBodyRect.height*0.5 );
 			Point ballCenter( (ballRect.x + ballRect.width* 0.5), (ballRect.y + ballRect.height * 0.5));
-			//double ballBodyDistance = euclideanDist(bodyCenter.x, bodyCenter.y, ballCenter.x, ballCenter.y);
 
 			if (unionBodyRect.width > 100 || unionBodyRect.height > 350)
 				continue;
 
 			if (unionBodyRect.br().y < Backboard.br().y)
-			{
-//					cout << " false body by Backboard" << endl;
 				continue;
-			}
 
 			Rect bodyRect = Rect(unionBodyRect.tl(), unionBodyRect.br());
 			Rect badBodyIntersect = Backboard & bodyRect;
 			if (badBodyIntersect.area() > (0.6 * bodyRect.area()))
-			{
-//					cout << " false body2 by Backboard" << endl;
 				continue;
-			}
 
 			//--- Start of adjusting player position on image of half court!!!-----
 			newPlayerWindow.frameCount = frameCount;
@@ -606,7 +565,6 @@ int main(int argc, const char** argv)
 			shotWindowMeta.push_back(make_pair(hgtAvg, xDistFromBB));
 			shotWindowMeta.pop_front();
 
-			////ellipse( img, bodyCenter, Size( unionBodyRect.width*0.5, unionBodyRect.height*0.5), 0, 0, 360, aquaColor, 4, 8, 0 );
 			line(img, Point(BackboardCenterX, BackboardCenterY), bodyCenter, blueColor, 1, 8);
 
 			int eu_mid_x = (int) (BackboardCenterX + bodyCenter.x) * 0.5;
@@ -632,29 +590,22 @@ int main(int argc, const char** argv)
 			stringstream havg_ss;
 			havg_ss << (int) hgtAvg;
 			string havg_str = havg_ss.str();
-			//putText(img, bodyHgt_str,Point((int)unionBodyRect.x + unionBodyRect.width*0.5-5, (int)unionBodyRect.y + unionBodyRect.height*0.5-5), FONT_HERSHEY_PLAIN, 1, greenColor, 1, 0.5);
 			putText(img, havg_str,Point((int)unionBodyRect.x + unionBodyRect.width*0.5-10,
 										(int)unionBodyRect.y + unionBodyRect.height*0.5),
 									FONT_HERSHEY_PLAIN, 1, greenColor, 2, 0.5);
 
 			newPlayerWindow.radiusIdx = findIndex_BSearch(radiusArray, shotWindowMeta.front().first);   //unionBodyRect.height);
-			//1newPlayerWindow.radiusIdx += 5;
-
-//			if ((xDistFromBB < 51) && (yDistFromBB < 70))
-//				newPlayerWindow.radiusIdx = 0;
-
-			double percentPlacement = (double) (bodyCenter.x - leftActiveBoundary) / (rightActiveBoundary - leftActiveBoundary);
+			double percentPlacement = (double) (bodyCenter.x - leftActiveBoundary) / (rightActiveBoundary - leftActiveBoundary) * 0.5;
 			int leftRingBound		= bbCenterPosit.x - radiusArray[newPlayerWindow.radiusIdx];
 			int rightRingBound		= bbCenterPosit.x + radiusArray[newPlayerWindow.radiusIdx];
 			int chartPlacementTemp	= (rightRingBound - leftRingBound) * percentPlacement;
 			int chartPlacement		= leftRingBound + chartPlacementTemp;
-
 			newPlayerWindow.placement = chartPlacement;
 
 			rectangle(img, Backboard.tl(), Backboard.br(), redColor, 2, 8, 0);
 
-			line(img, Point(Backboard.br().x - Backboard.width,  Backboard.br().y - (unionRect.height * 1 / 3) ),
-					  Point(Backboard.br().x, Backboard.br().y - (unionRect.height * 1 / 3) ), blueColor, 1, 8);
+			//line(img, Point(Backboard.br().x - Backboard.width,  Backboard.br().y - (unionRect.height * 1 / 3) ),
+			//		  Point(Backboard.br().x, Backboard.br().y - (unionRect.height * 1 / 3) ), blueColor, 1, 8);
 			circle(img, Point(BackboardCenterX, BackboardCenterY), 1, greenColor, 3);
 
 			stringstream iss;
@@ -665,7 +616,6 @@ int main(int argc, const char** argv)
 
 			cvReleaseImage(&labelImg);
 			cvReleaseImage(&segmentated);
-			//trRects.clear();
 		}  //if (haveBackboard)
 
 		//Create string of frame counter to display on video window.
