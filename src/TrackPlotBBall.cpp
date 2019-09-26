@@ -158,6 +158,9 @@ int main(int argc, const char** argv)
 	Point body_max_tl, body_max_br;
 	Point body_tl, body_br;
 	Point bodyCenter;
+	bool firstIntersectPass = true;
+	int firstIntersectPassWindow = 90;   //50;
+	int firstIntersectPassThresh;
 
 	CvTracks tracks;
 	CvTracks body_tracks;
@@ -324,6 +327,9 @@ int main(int argc, const char** argv)
 		string frame_str = frame_ss.str();
 		if (haveBackboard)
 		{
+			if (frameCount > firstIntersectPassThresh)
+				firstIntersectPass = true;
+
 			putText(bbsrc, "C",	bbCenterPosit,	FONT_HERSHEY_PLAIN, 1,	greenColor, 2, 0.5);
 
 	    	if (!semiCircleReady)
@@ -405,8 +411,11 @@ int main(int argc, const char** argv)
 				Rect objIntersect = Backboard & ballRect;
 
 				//---Start of the process of identifying a shot at the basket!!!------------
-				if (objIntersect.area() > 0)
+				if (objIntersect.area() > 0 && ballRect.area() < 250 && firstIntersectPass)
 				{
+					firstIntersectPass = false;
+					firstIntersectPassThresh = frameCount + firstIntersectPassWindow;
+
 					//Predict a made shot
 					Mat basketRoI = img(Backboard).clone();
 					//resize(basketRoI, basketRoI, Size(416,416));
@@ -485,6 +494,7 @@ int main(int argc, const char** argv)
 						if (get<1>(shotMeta) < 80)
 								xshift += 120;
 						cout << frameCount << " : xshift=" << xshift << endl;
+						if (xshift > 260)  xshift = 260;
 						float percent = (float) xshift / 260;
 						placementIdx = percent * rightSideRange;
 						placementIdx += leftSideRange;   //Note: must apply offset of left range to make sure we are only choosing indexes in the right range.
@@ -494,7 +504,7 @@ int main(int argc, const char** argv)
 					{
 						xshift = -1 * xshift;
 						cout << frameCount << " : xshift=" << xshift << endl;
-						float percent = (float) xshift / 180;
+						float percent = (float) xshift / 250;   //180;
 						percent = 1.0 - percent;
 						placementIdx = percent * leftSideRange;
 						cout << frameCount << " :Left Side  percent=" << percent << "   placementIdx=" << placementIdx << endl;
