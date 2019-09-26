@@ -111,7 +111,6 @@ int main(int argc, const char** argv)
 	int thresh 										= 85;
 	RNG rng(12345);
 	int newPlayerWindowSize 						= 50;
-	//PlayerObs newPlayerWindow;
 	vector <int> radiusArray;
 	vector <int> radiusRangeArray;
 	Point courtArc[newPlayerWindowSize][1200];
@@ -126,6 +125,7 @@ int main(int argc, const char** argv)
 	Rect ballRect;				//Represents the box around the trackable basketball
 	vector< vector<Point> > boardContours;	
 	Scalar greenColor 								= Scalar (0, 215, 0);
+	Scalar darkgreenColor 							= Scalar (0, 104, 0);
 	//Scalar color1    							    = Scalar (25, 0, 51);
 	Scalar redColor 								= Scalar (0, 0, 215);
 	Scalar blueColor								= Scalar (215, 0, 0);
@@ -146,9 +146,9 @@ int main(int argc, const char** argv)
 	int BackboardCenterX;
 	int BackboardCenterY;
 	int leftActiveBoundary;
-	int rightActiveBoundary;
-	int topActiveBoundary;
-	int bottomActiveBoundary;
+	//unsigned int rightActiveBoundary;
+	unsigned int topActiveBoundary;
+	//unsigned int bottomActiveBoundary;
 	int leftBBRegionLimit;
 	int rightBBRegionLimit;
 	//int topBBRegionLimit;
@@ -164,8 +164,7 @@ int main(int argc, const char** argv)
 	Rect unionRect;
 	vector<int> hgtArray;
 	float hgtAvg = 0.0;
-//	deque< pair<int, int> > shotWindowMeta;
-	deque< tuple<int, int, int, int, int> > shotWindowTuple;
+	deque< tuple<int, int, int, int, int, int> > shotWindowTuple;
 	double xDistFromBB=0;
 	double yDistFromBB=0;
 
@@ -215,9 +214,9 @@ int main(int argc, const char** argv)
 
 
 	leftActiveBoundary 			= firstFrame.cols/4;  
-	rightActiveBoundary			= firstFrame.cols*3/4;
+//	rightActiveBoundary			= firstFrame.cols*3/4;
 	topActiveBoundary				= firstFrame.rows/4;
-	bottomActiveBoundary			= firstFrame.rows*3/4;
+//	bottomActiveBoundary			= firstFrame.rows*3/4;
 	leftBBRegionLimit = (int) firstFrame.cols * 3 / 8;
 	rightBBRegionLimit = (int) firstFrame.cols * 5 / 8;
 	//topBBRegionLimit = (int) firstFrame.rows*2/8;
@@ -255,7 +254,7 @@ int main(int argc, const char** argv)
 		stringstream frame_ss;
 		if (!haveBackboard)
 		{
-			shotWindowTuple.push_back( make_tuple (frameCount, 80, 150, 250, 200) );
+			shotWindowTuple.push_back( make_tuple (frameCount, 80, 150, 190, 250, 200) );
 
 
 			getGray(img,grayImage);											//Converts to a gray image.  All we need is a gray image for cv computing.
@@ -330,13 +329,13 @@ int main(int argc, const char** argv)
 	    	if (!semiCircleReady)
 	    	{
 	    		int radiusIdx = 0;
-	    		for (int radius = 40; radius < 280; radius += 20)   //Radius for euclidDistFromBB
+	    		//for (int radius = 40; radius < 280; radius += 20)   //Radius for euclidDistFromBB
+	    		for (int radius = 40; radius < 340; radius += 60)   //Radius for euclidDistFromBB
 	    		{
 	    			radiusArray.push_back(radius);
 
 	    			int temp1, temp2, temp3;
 	    			int yval;
-	    			cout << "bbCenterPosit=" << bbCenterPosit << endl;
 	    			int k = 0;
 	    			for (int j = (bbCenterPosit.x - radius); j <= (bbCenterPosit.x + radius); j++)   //Using Pythagorean's theorem to find positions on each court arc.
 	    			{
@@ -347,7 +346,7 @@ int main(int argc, const char** argv)
 	    				yval += bbCenterPosit.y;
 	    				Point ptTemp = Point(j, yval);
 	    				courtArc[radiusIdx][k] = ptTemp;
-	    				cout << "courtArc[" << radiusIdx << "][" << k << "] =" << courtArc[radiusIdx][k]  << endl;
+	    				//cout << "courtArc[" << radiusIdx << "][" << k << "] =" << courtArc[radiusIdx][k]  << endl;
 	    				circle(bbsrc, ptTemp, 1, blueColor, -1);
 	    				k++;
 	    			}
@@ -402,137 +401,110 @@ int main(int argc, const char** argv)
 				rectangle(img, ballRect.tl(), ballRect.br(), orangeColor, 1, 8, 0);
 
 				//------------Track the basketball!!!!---------------
-//				if ( (ballRect.x > leftActiveBoundary)
-//								&& (ballRect.x < rightActiveBoundary)
-//								&& (ballRect.y > topActiveBoundary)
-//								&& (ballRect.y < bottomActiveBoundary) )
-//				{
-					//The basketball on video frames.
-					Rect objIntersect = Backboard & ballRect;
-//					cout << frameCount << " : objIntersect=" << objIntersect << "   objIntersect.area()=" << objIntersect.area() << endl;
+				//The basketball on video frames.
+				Rect objIntersect = Backboard & ballRect;
 
-					//---Start of the process of identifying a shot at the basket!!!------------
-					if (objIntersect.area() > 0)
+				//---Start of the process of identifying a shot at the basket!!!------------
+				if (objIntersect.area() > 0)
+				{
+					//Predict a made shot
+					Mat basketRoI = img(Backboard).clone();
+					//resize(basketRoI, basketRoI, Size(416,416));
+
+					//! [Prepare blob]
+					Mat inputBlob = blobFromImage(basketRoI, 1 / 255.F, Size(416, 416), Scalar(), true, false); //Convert Mat to batch of images
+					//! [Prepare blob]
+
+					//! [Set input blob]
+					net.setInput(inputBlob, "data");                   //set the network input
+					//! [Set input blob]
+
+					//! [Make forward pass]
+					Mat detectionMat = net.forward("detection_out");   //compute output
+
+					for (int i = 0; i < detectionMat.rows; i++)
 					{
-//						cout << frameCount << "  Yes for Area" << endl;
-//						cout << "        objIntersect.area()=" << objIntersect.area() << endl;
+						const int probability_index = 5;
+						const int probability_size = detectionMat.cols - probability_index;
+						float *prob_array_ptr = &detectionMat.at<float>(i, probability_index);
 
-						//Predict a made shot
-						Mat basketRoI = img(Backboard).clone();
-						//resize(basketRoI, basketRoI, Size(416,416));
+						size_t objectClass = max_element(prob_array_ptr, prob_array_ptr + probability_size) - prob_array_ptr;
+						float confidence = detectionMat.at<float>(i, (int)objectClass + probability_index);
 
-						//! [Prepare blob]
-						Mat inputBlob = blobFromImage(basketRoI, 1 / 255.F, Size(416, 416), Scalar(), true, false); //Convert Mat to batch of images
-						//! [Prepare blob]
-
-						//! [Set input blob]
-						net.setInput(inputBlob, "data");                   //set the network input
-						//! [Set input blob]
-
-						//! [Make forward pass]
-						Mat detectionMat = net.forward("detection_out");   //compute output
-
-						for (int i = 0; i < detectionMat.rows; i++)
+						if (confidence > 0.24)
 						{
-							const int probability_index = 5;
-							const int probability_size = detectionMat.cols - probability_index;
-							float *prob_array_ptr = &detectionMat.at<float>(i, probability_index);
+							float x = detectionMat.at<float>(i, 0);
+							float y = detectionMat.at<float>(i, 1);
+							float width = detectionMat.at<float>(i, 2);
+							float height = detectionMat.at<float>(i, 3);
+							int xLeftBottom = static_cast<int>((x - width / 2) * basketRoI.cols);
+							int yLeftBottom = static_cast<int>((y - height / 2) * basketRoI.rows);
+							int xRightTop = static_cast<int>((x + width / 2) * basketRoI.cols);
+							int yRightTop = static_cast<int>((y + height / 2) * basketRoI.rows);
 
-							size_t objectClass = max_element(prob_array_ptr, prob_array_ptr + probability_size) - prob_array_ptr;
-							float confidence = detectionMat.at<float>(i, (int)objectClass + probability_index);
+							Rect object(xLeftBottom, yLeftBottom,
+										xRightTop - xLeftBottom,
+										yRightTop - yLeftBottom);
 
-							if (confidence > 0.24)
+							if (objectClass < classNamesVec.size())
 							{
-								float x = detectionMat.at<float>(i, 0);
-								float y = detectionMat.at<float>(i, 1);
-								float width = detectionMat.at<float>(i, 2);
-								float height = detectionMat.at<float>(i, 3);
-								int xLeftBottom = static_cast<int>((x - width / 2) * basketRoI.cols);
-								int yLeftBottom = static_cast<int>((y - height / 2) * basketRoI.rows);
-								int xRightTop = static_cast<int>((x + width / 2) * basketRoI.cols);
-								int yRightTop = static_cast<int>((y + height / 2) * basketRoI.rows);
-
-								Rect object(xLeftBottom, yLeftBottom,
-											xRightTop - xLeftBottom,
-											yRightTop - yLeftBottom);
-
-								if (objectClass < classNamesVec.size())
-								{
-									frame_ss.str("");
-									frame_ss << confidence;
-									String conf(frame_ss.str());
-									String label = String(classNamesVec[objectClass]) + ": " + conf;
-								}
-								else
-								{
-									cout << "Class: " << objectClass << endl;
-									cout << "Confidence: " << confidence << endl;
-									cout << " " << xLeftBottom
-										 << " " << yLeftBottom
-										 << " " << xRightTop
-										 << " " << yRightTop << endl;
-								}
+								frame_ss.str("");
+								frame_ss << confidence;
+								String conf(frame_ss.str());
+								String label = String(classNamesVec[objectClass]) + ": " + conf;
+							}
+							else
+							{
+								cout << "Class: " << objectClass << endl;
+								cout << "Confidence: " << confidence << endl;
+								cout << " " << xLeftBottom
+									 << " " << yLeftBottom
+									 << " " << xRightTop
+									 << " " << yRightTop << endl;
 							}
 						}
-						//********End of Shot Prediction **********
-
-						//---Start of using player position on halfcourt image to draw shot location-----
-
-
-
-						auto shotMeta = shotWindowTuple.front();
-						cout << "shotMeta:   frameCount=" << get<0>(shotMeta) << "   hgtAvg=" << get<1>(shotMeta) << "   XShift=" << get<2>(shotMeta) << endl;
-
-						int radiusIdx = findIndex_BSearch( radiusArray, get<1>(shotMeta) );   //unionBodyRect.height);
-						cout << frameCount << " :  radiusIdx=" << radiusIdx << endl;
-						//double percentPlacement = (double) (get<3>(shotMeta) - leftActiveBoundary) / (rightActiveBoundary - leftActiveBoundary) * 0.5;
-						//double percentPlacement = (double) get<3>(shotMeta) / S.width * 0.633;
-
-//						cout << "bodyCenter.x=" << get<3>(shotMeta) << endl;
-//						cout << "leftActiveBoundary=" << leftActiveBoundary << "   rightActiveBoundary=" << rightActiveBoundary << endl;
-//						cout << "percentPlacement=" << percentPlacement << endl;
-//						int leftRingBound		= bbCenterPosit.x - radiusArray[radiusIdx];
-//						cout << "bbCenterPosit.x=" << bbCenterPosit.x << "   radiusArray[" << radiusIdx << "]=" << radiusArray[radiusIdx] << endl;
-//						cout << "leftRingBound=" << leftRingBound << endl;
-//						int rightRingBound		= bbCenterPosit.x + radiusArray[radiusIdx];
-//						cout << "rightRingBound=" << rightRingBound << endl;
-//						int chartPlacementTemp	= (rightRingBound - leftRingBound) * percentPlacement;
-//						int chartPlacement		= leftRingBound + chartPlacementTemp;
-//						cout << frameCount << " : radiusIdx=" << radiusIdx << "    chartPlacement=" << chartPlacement << endl;
-
-						int valueRange = radiusRangeArray.at(radiusIdx);
-						cout << frameCount << " :  valueRange=" << valueRange << endl;
-						int leftSideRange = valueRange * 0.3;
-						int rightSideRange = valueRange - leftSideRange;
-						cout << frameCount << " : leftSideRange=" << leftSideRange << "   rightSideRange=" << rightSideRange << endl;
-						int xshift = get<2>(shotMeta);
-						cout << frameCount << " : xshift=" << xshift << endl;
-						int placementIdx;
-						if ( xshift > 0 )
-						{
-							float temp = (float) xshift / 260;
-							placementIdx = temp * rightSideRange;
-						}
-						else
-						{
-							xshift = -1 * xshift;
-							float temp = (float) xshift / 250;
-							temp = 1.0 - temp;
-							placementIdx = temp * leftSideRange;
-						}
-						cout << frameCount << " :  placementIdx=" << placementIdx << endl;
-
-						//frameWindow = frameCount + 75;  // 10;
-						//Point offPt = Point(courtArc[radiusIdx][chartPlacement].x-5, courtArc[radiusIdx][chartPlacement].y-5);
-						//Point shotPoint = Point(courtArc[radiusIdx][chartPlacement].x, courtArc[radiusIdx][chartPlacement].y);
-						Point shotPoint = Point(courtArc[radiusIdx][placementIdx].x, courtArc[radiusIdx][placementIdx].y);
-						cout << frameCount << " : shotPoint=" << shotPoint << endl;
-						//putText(bbsrc, X_str, courtArc[newPlayerWindow.radiusIdx][newPlayerWindow.placement], FONT_HERSHEY_PLAIN, 1 , redColor, 1, LINE_4);
-						putText(bbsrc, frame_str, shotPoint, FONT_HERSHEY_PLAIN, 1 , Scalar( rng.uniform(0, 255), rng.uniform(0, 255), rng.uniform(0, 255) ), 1, 0.5);
 					}
+					//********End of Shot Prediction **********
 					//---Start of using player position on halfcourt image to draw shot location-----
-					//---End of the process of identifying a shot at the basket!!!------------
-//				}
+					auto shotMeta = shotWindowTuple.front();
+					cout << "shotMeta:   frameCount=" << get<0>(shotMeta) << "   hgtAvg=" << get<1>(shotMeta) << "   XShift=" << get<2>(shotMeta)
+						 <<	"    euclidDist=" << get<3>(shotMeta) << endl;
+
+					int radiusIdx = findIndex_BSearch( radiusArray, get<3>(shotMeta) );   //unionBodyRect.height);
+					cout << frameCount << " :  radiusIdx=" << radiusIdx << endl;
+
+					int valueRange = radiusRangeArray.at(radiusIdx);
+					cout << frameCount << " :  valueRange=" << valueRange << endl;
+					int leftSideRange = valueRange * 0.3;
+					int rightSideRange = valueRange - leftSideRange;
+					cout << frameCount << " : leftSideRange=" << leftSideRange << "   rightSideRange=" << rightSideRange << endl;
+					int xshift = get<2>(shotMeta);
+					int placementIdx;
+					if ( xshift > 0 )
+					{
+						if (get<1>(shotMeta) < 80)
+								xshift += 120;
+						cout << frameCount << " : xshift=" << xshift << endl;
+						float percent = (float) xshift / 260;
+						placementIdx = percent * rightSideRange;
+						placementIdx += leftSideRange;   //Note: must apply offset of left range to make sure we are only choosing indexes in the right range.
+						cout << frameCount << " :Right Side  percent=" << percent << "   placementIdx=" << placementIdx << endl;
+					}
+					else
+					{
+						xshift = -1 * xshift;
+						cout << frameCount << " : xshift=" << xshift << endl;
+						float percent = (float) xshift / 180;
+						percent = 1.0 - percent;
+						placementIdx = percent * leftSideRange;
+						cout << frameCount << " :Left Side  percent=" << percent << "   placementIdx=" << placementIdx << endl;
+					}
+
+					Point shotPoint = Point(courtArc[radiusIdx][placementIdx].x, courtArc[radiusIdx][placementIdx].y);
+					cout << frameCount << " : shotPoint=" << shotPoint << endl;
+					//putText(bbsrc, X_str, courtArc[newPlayerWindow.radiusIdx][newPlayerWindow.placement], FONT_HERSHEY_PLAIN, 1 , redColor, 1, LINE_4);
+					putText(bbsrc, frame_str, shotPoint, FONT_HERSHEY_PLAIN, 1 , Scalar( rng.uniform(0, 255), rng.uniform(0, 255), rng.uniform(0, 255) ), 1, 0.5);
+				}
 			}  // for (CvTracks::const_iterator jt)
 				///*******End of code to detect & select Basketball*************************
 
@@ -600,35 +572,11 @@ int main(int argc, const char** argv)
 			if ( (unionBodyRect.width > unionBodyRect.height) || (unionBodyRect.width > 95) )
 				continue;
 
-//			cout << frameCount << " : unionBodyRect=" << unionBodyRect << endl;
-
-//			if ((float) unionBodyRect.height < (float) (unionBodyRect.width*1.5))
-//				continue;
-
-//			if ( (unionBodyRect.height < 50) || (unionBodyRect.height > 275) )
-//				continue;
-
-			rectangle(img, unionBodyRect.tl(), unionBodyRect.br(), greenColor, 2, 8, 0);
+			rectangle(img, unionBodyRect.tl(), unionBodyRect.br(), darkgreenColor, 2, 8, 0);
 
 			//-----------Identifying player height and position!!--------------
 			Point bodyCenter( unionBodyRect.x + unionBodyRect.width*0.5, unionBodyRect.y + unionBodyRect.height*0.5 );
 			Point ballCenter( (ballRect.x + ballRect.width* 0.5), (ballRect.y + ballRect.height * 0.5));
-
-//			if (unionBodyRect.width > 100 || unionBodyRect.height > 350)
-//				continue;
-
-//			if (unionBodyRect.br().y < Backboard.br().y)
-//				continue;
-
-//			Rect bodyRect = Rect(unionBodyRect.tl(), unionBodyRect.br());
-//			Rect badBodyIntersect = Backboard & bodyRect;
-//			if (badBodyIntersect.area() > (0.6 * bodyRect.area()))
-//				continue;
-
-			//--- Start of adjusting player position on image of half court!!!-----
-//			newPlayerWindow.frameCount = frameCount;
-//			newPlayerWindow.activeValue = 1;
-//			newPlayerWindow.position = bodyCenter;
 
 			int euclidDistFromBB = euclideanDist((double) BackboardCenterX,
 											  (double) BackboardCenterY,
@@ -636,10 +584,6 @@ int main(int argc, const char** argv)
 											  (double) bodyCenter.y);
 			xDistFromBB = (int) oneDDist(BackboardCenterX, bodyCenter.x);
 			yDistFromBB = (int) oneDDist(BackboardCenterY, bodyCenter.y);
-			//float heightNorm = (float) unionBodyRect.height / 375.0f;
-//			shotWindowMeta.push_back(make_pair((int)hgtAvg, xDistFromBB));
-//			shotWindowMeta.pop_front();
-
 
 			line(img, Point(BackboardCenterX, BackboardCenterY), bodyCenter, blueColor, 1, 8);
 
@@ -654,7 +598,7 @@ int main(int argc, const char** argv)
 			else
 				xDistLabel = xDistFromBB;
 
-			shotWindowTuple.push_back( make_tuple(frameCount, (int)hgtAvg, xDistLabel, bodyCenter.x, bodyCenter.y) );
+			shotWindowTuple.push_back( make_tuple(frameCount, (int)hgtAvg, xDistLabel, euclidDistFromBB, bodyCenter.x, bodyCenter.y) );
 			shotWindowTuple.pop_front();
 
 
@@ -673,7 +617,7 @@ int main(int argc, const char** argv)
 			string havg_str = havg_ss.str();
 			putText(img, havg_str,Point((int)unionBodyRect.x + unionBodyRect.width*0.5-10,
 										(int)unionBodyRect.y + unionBodyRect.height*0.5),
-									FONT_HERSHEY_PLAIN, 1, greenColor, 2, 0.5);
+									FONT_HERSHEY_PLAIN, 1, darkgreenColor, 2, 0.5);
 
 
 			rectangle(img, Backboard.tl(), Backboard.br(), redColor, 2, 8, 0);
