@@ -336,7 +336,7 @@ int main(int argc, const char** argv)
 	    	{
 	    		int radiusIdx = 0;
 	    		//for (int radius = 40; radius < 280; radius += 20)   //Radius for euclidDistFromBB
-	    		for (int radius = 40; radius < 340; radius += 60)   //Radius for euclidDistFromBB
+	    		for (int radius = 40; radius < 340; radius += 30)   //60)   //Radius for euclidDistFromBB
 	    		{
 	    			radiusArray.push_back(radius);
 
@@ -511,9 +511,21 @@ int main(int argc, const char** argv)
 					if ( xshift > 0 )
 					{
 						if (get<1>(shotMeta) < 80)
-								xshift += 120;
+						{
+							xshift += 120;
+							if (xshift > 260)
+								xshift = 260;
+						}
+						else
+						{
+							if (xshift > 260 && get<1>(shotMeta) < 80)
+								xshift = 260;
+							else
+								xshift = xshift/2;
+						}
+
 						cout << frameCount << " : xshift=" << xshift << endl;
-						if (xshift > 260)  xshift = 260;
+
 						float percent = (float) xshift / 260;
 						placementIdx = percent * rightSideRange;
 						placementIdx += leftSideRange;   //Note: must apply offset of left range to make sure we are only choosing indexes in the right range.
@@ -521,10 +533,13 @@ int main(int argc, const char** argv)
 					}
 					else
 					{
+						if (current_xshift > 29)
+							xshift = xshift/8;
 						xshift = -1 * xshift;
+
 						cout << frameCount << " : xshift=" << xshift << endl;
 						float percent = (float) xshift / 250;   //180;
-						percent = 1.0 - percent;
+						//percent = 1.0 - percent;
 						placementIdx = percent * leftSideRange;
 						cout << frameCount << " :Left Side  percent=" << percent << "   placementIdx=" << placementIdx << endl;
 					}
