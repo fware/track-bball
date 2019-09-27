@@ -413,6 +413,8 @@ int main(int argc, const char** argv)
 				//---Start of the process of identifying a shot at the basket!!!------------
 				if (objIntersect.area() > 0 && ballRect.area() < 250 && firstIntersectPass)
 				{
+					cout << frameCount << " : Ball AREA=" << ballRect.area() << endl;
+					cout << frameCount << " : objIntersect.area()=" << objIntersect.area() << endl;
 					firstIntersectPass = false;
 					firstIntersectPassThresh = frameCount + firstIntersectPassWindow;
 
@@ -475,11 +477,28 @@ int main(int argc, const char** argv)
 					}
 					//********End of Shot Prediction **********
 					//---Start of using player position on halfcourt image to draw shot location-----
+					auto shotMetaCurrent = shotWindowTuple.back();
+					cout << "shotMetaCurrent:   frameCount=" << get<0>(shotMetaCurrent) << "   hgtAvg=" << get<1>(shotMetaCurrent) << "   XShift=" << get<2>(shotMetaCurrent)
+						 <<	"    euclidDist=" << get<3>(shotMetaCurrent) << endl;
 					auto shotMeta = shotWindowTuple.front();
+					int current_xshift = abs( get<2>(shotMetaCurrent) );
+
+					int take_a_size;
+
+					if (current_xshift < 30)
+					{
+						shotMeta = shotMetaCurrent;
+						take_a_size = current_xshift;  //max(get<1>(shotMeta), get<3>(shotMeta));
+					}
+					else
+					{
+						take_a_size = max(get<1>(shotMeta), get<3>(shotMeta));
+					}
+
 					cout << "shotMeta:   frameCount=" << get<0>(shotMeta) << "   hgtAvg=" << get<1>(shotMeta) << "   XShift=" << get<2>(shotMeta)
 						 <<	"    euclidDist=" << get<3>(shotMeta) << endl;
 
-					int radiusIdx = findIndex_BSearch( radiusArray, get<3>(shotMeta) );   //unionBodyRect.height);
+					int radiusIdx = findIndex_BSearch( radiusArray, take_a_size );   //unionBodyRect.height);
 					cout << frameCount << " :  radiusIdx=" << radiusIdx << endl;
 
 					int valueRange = radiusRangeArray.at(radiusIdx);
@@ -514,6 +533,8 @@ int main(int argc, const char** argv)
 					cout << frameCount << " : shotPoint=" << shotPoint << endl;
 					//putText(bbsrc, X_str, courtArc[newPlayerWindow.radiusIdx][newPlayerWindow.placement], FONT_HERSHEY_PLAIN, 1 , redColor, 1, LINE_4);
 					putText(bbsrc, frame_str, shotPoint, FONT_HERSHEY_PLAIN, 1 , Scalar( rng.uniform(0, 255), rng.uniform(0, 255), rng.uniform(0, 255) ), 1, 0.5);
+
+					cout << frameCount << " : --------------------------------------------------" << endl;
 				}
 			}  // for (CvTracks::const_iterator jt)
 				///*******End of code to detect & select Basketball*************************
