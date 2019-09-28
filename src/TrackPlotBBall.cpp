@@ -124,14 +124,14 @@ int main(int argc, const char** argv)
 	Mat fgmask;					//Foreground mask image.
 	Rect ballRect;				//Represents the box around the trackable basketball
 	vector< vector<Point> > boardContours;	
-	Scalar greenColor 								= Scalar (0, 215, 0);
+	Scalar greenColor 								= Scalar (0, 180, 0);
 	Scalar darkgreenColor 							= Scalar (0, 104, 0);
 	//Scalar color1    							    = Scalar (25, 0, 51);
 	Scalar redColor 								= Scalar (0, 0, 215);
 	Scalar blueColor								= Scalar (215, 0, 0);
 	//Scalar blackColor								= Scalar (40, 40, 40);
 	Scalar orangeColor								= Scalar (0, 140, 255);
-	//Scalar aquaColor								= Scalar (255, 140, 0);
+	Scalar aquaColor								= Scalar (255, 140, 0);
 	//Scalar rngColor = Scalar( rng.uniform(0, 255), rng.uniform(0, 255), rng.uniform(0, 255) );
 	bool haveBackboard 								= false;
     //vector<Rect> bodys;
@@ -139,10 +139,13 @@ int main(int argc, const char** argv)
 	String modelConfig								= "/home/fred/Dev/DNN_models/MadeShots/V1/made.cfg";
 	Mat firstFrame;
 	bool semiCircleReady 							= false;
+	bool isMadeShot									= false;
 	Rect offsetBackboard;
 	Rect Backboard;
+	Rect madeRoIRect;
 	Point bodyPosit;
 	Point bbCenterPosit;
+	Point shotPoint;
 	int BackboardCenterX;
 	int BackboardCenterY;
 	int leftActiveBoundary;
@@ -308,8 +311,10 @@ int main(int argc, const char** argv)
         				//Coords in true video content
 		                Backboard = Rect( Point(unionRect.br().x - unionRect.width,  unionRect.br().y - (unionRect.height * 1 / 3) ), unionRect.br() );
 
-        				BackboardCenterX = (Backboard.tl().x + (Backboard.width*3/4));   // (Backboard.tl().x+(Backboard.width/2));     // A pure guess
+        				BackboardCenterX = (Backboard.tl().x + (Backboard.width*3/4)) - 5;   // (Backboard.tl().x+(Backboard.width/2));     // A pure guess
         				BackboardCenterY = (Backboard.tl().y + (Backboard.height*3/4));    // (Backboard.tl().y+(Backboard.height/2));  // A pure guess
+
+        				madeRoIRect = Rect( Point(BackboardCenterX-10, Backboard.tl().y + Backboard.height/2), Point(BackboardCenterX+10, Backboard.br().y) );
 
         				haveBackboard = true;
         			}
@@ -327,8 +332,16 @@ int main(int argc, const char** argv)
 		string frame_str = frame_ss.str();
 		if (haveBackboard)
 		{
-			if (frameCount > firstIntersectPassThresh)
+			if (frameCount > firstIntersectPassThresh && !firstIntersectPass)
+			{
+				if (isMadeShot)
+					putText(bbsrc, O_str, shotPoint, FONT_HERSHEY_SIMPLEX, 1 , greenColor, 1, LINE_4);
+				else
+					putText(bbsrc, X_str, shotPoint, FONT_HERSHEY_SIMPLEX, 1 , redColor, 1, LINE_4);
+
+				isMadeShot = false;
 				firstIntersectPass = true;
+			}
 
 			putText(bbsrc, "C",	bbCenterPosit,	FONT_HERSHEY_PLAIN, 1,	greenColor, 2, 0.5);
 
@@ -336,7 +349,7 @@ int main(int argc, const char** argv)
 	    	{
 	    		int radiusIdx = 0;
 	    		//for (int radius = 40; radius < 280; radius += 20)   //Radius for euclidDistFromBB
-	    		for (int radius = 40; radius < 340; radius += 30)   //60)   //Radius for euclidDistFromBB
+	    		for (int radius = 40; radius < 300; radius += 30)   //60)   //Radius for euclidDistFromBB
 	    		{
 	    			radiusArray.push_back(radius);
 
@@ -380,7 +393,7 @@ int main(int argc, const char** argv)
 					double g = ((double)c.val[1])/255.;
 					double r = ((double)c.val[2])/255.;
 
-					unsigned char f = 255 * ( ( r > 0.12 + g ) && ( r > 0.16 + b ) && (g > 0.013 + b));   //Yes good for now!  Detecting color of basketball.
+					unsigned char f = 255 * ( ( r > 0.12 + g ) && ( r > 0.16 + b ) && ( g > 0.013 + b) );   //Yes good for now!  Detecting color of basketball.
 
 					cvSet2D(segmentated, j, i, CV_RGB(f, f, f));
 				}
@@ -418,6 +431,13 @@ int main(int argc, const char** argv)
 					firstIntersectPass = false;
 					firstIntersectPassThresh = frameCount + firstIntersectPassWindow;
 
+					Rect madeIntersect = madeRoIRect & ballRect;
+					if (madeIntersect.area() > 0)
+					{
+						isMadeShot = true;
+					}
+
+					/*
 					//Predict a made shot
 					Mat basketRoI = img(Backboard).clone();
 					//resize(basketRoI, basketRoI, Size(416,416));
@@ -474,7 +494,7 @@ int main(int argc, const char** argv)
 									 << " " << yRightTop << endl;
 							}
 						}
-					}
+					}*/
 					//********End of Shot Prediction **********
 					//---Start of using player position on halfcourt image to draw shot location-----
 					auto shotMetaCurrent = shotWindowTuple.back();
@@ -544,12 +564,23 @@ int main(int argc, const char** argv)
 						cout << frameCount << " :Left Side  percent=" << percent << "   placementIdx=" << placementIdx << endl;
 					}
 
-					Point shotPoint = Point(courtArc[radiusIdx][placementIdx].x, courtArc[radiusIdx][placementIdx].y);
-					cout << frameCount << " : shotPoint=" << shotPoint << endl;
-					//putText(bbsrc, X_str, courtArc[newPlayerWindow.radiusIdx][newPlayerWindow.placement], FONT_HERSHEY_PLAIN, 1 , redColor, 1, LINE_4);
-					putText(bbsrc, frame_str, shotPoint, FONT_HERSHEY_PLAIN, 1 , Scalar( rng.uniform(0, 255), rng.uniform(0, 255), rng.uniform(0, 255) ), 1, 0.5);
+					shotPoint = Point(courtArc[radiusIdx][placementIdx].x, courtArc[radiusIdx][placementIdx].y);
+//					cout << frameCount << " : shotPoint=" << shotPoint << endl;
+//					putText(bbsrc, X_str, shotPoint, FONT_HERSHEY_SIMPLEX, 1 , redColor, 1, LINE_4);
+					//putText(bbsrc, frame_str, shotPoint, FONT_HERSHEY_PLAIN, 1 , Scalar( rng.uniform(0, 255), rng.uniform(0, 255), rng.uniform(0, 255) ), 1, 0.5);
 
 					cout << frameCount << " : --------------------------------------------------" << endl;
+				}
+				else           //Final few frames to confirm if shot was made or not
+				{
+					if (!isMadeShot)
+					{
+						Rect madeIntersect = madeRoIRect & ballRect;
+						if (madeIntersect.area() > 0)
+						{
+							isMadeShot = true;
+						}
+					}
 				}
 			}  // for (CvTracks::const_iterator jt)
 				///*******End of code to detect & select Basketball*************************
@@ -665,8 +696,10 @@ int main(int argc, const char** argv)
 										(int)unionBodyRect.y + unionBodyRect.height*0.5),
 									FONT_HERSHEY_PLAIN, 1, darkgreenColor, 2, 0.5);
 
-
 			rectangle(img, Backboard.tl(), Backboard.br(), redColor, 2, 8, 0);
+
+
+			rectangle(img, madeRoIRect.tl(), madeRoIRect.br(), aquaColor, 2, 8, 0);
 
 			//line(img, Point(Backboard.br().x - Backboard.width,  Backboard.br().y - (unionRect.height * 1 / 3) ),
 			//		  Point(Backboard.br().x, Backboard.br().y - (unionRect.height * 1 / 3) ), blueColor, 1, 8);
