@@ -101,6 +101,8 @@ int main(int argc, const char** argv)
 
     help();
 	int frameCount 									= 0;
+	int madeShots									= 0;
+	int shotTotal									= 0;
 	//int frameWindow									= 0;
 	const string bballPatternFile 					= "/home/fred/Pictures/OrgTrack_res/bball3_vga.jpg";
 	Mat patternImage 								= imread(bballPatternFile);
@@ -328,6 +330,7 @@ int main(int argc, const char** argv)
 		///*************************End of main code to detect BackBoard*************************
 
 		///*******Start of main code to detect Basketball*************************
+		putText(bbsrc, "Field Goals: ", Point(18, 420), FONT_HERSHEY_SIMPLEX, 0.5, blueColor, 1, FILLED);
 		frame_ss << frameCount;
 		string frame_str = frame_ss.str();
 		if (haveBackboard)
@@ -335,9 +338,44 @@ int main(int argc, const char** argv)
 			if (frameCount > firstIntersectPassThresh && !firstIntersectPass)
 			{
 				if (isMadeShot)
+				{
+					float fgp = (float) madeShots/shotTotal;
+					stringstream prev_ss;
+					prev_ss << madeShots << "/" << shotTotal << " : " << fgp;
+					string prev_str = prev_ss.str();
+					putText(bbsrc, prev_str, Point(120, 420), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255,255,255), 1, FILLED);
+
+					madeShots++;
+					shotTotal++;
+
+					fgp = (float) madeShots/shotTotal;
+					stringstream made_ss;
+					made_ss << madeShots << "/" << shotTotal << " : " << fgp;
+					string made_str = made_ss.str();
+					putText(bbsrc, made_str, Point(120, 420), FONT_HERSHEY_SIMPLEX, 0.5, blueColor, 1, FILLED);
+
+
 					putText(bbsrc, O_str, shotPoint, FONT_HERSHEY_SIMPLEX, 1 , greenColor, 1, LINE_4);
+				}
 				else
+				{
+					float fgp = (float) madeShots/shotTotal;
+					stringstream prev_ss;
+					prev_ss << madeShots << "/" << shotTotal << " : " << fgp;
+					string prev_str = prev_ss.str();
+					putText(bbsrc, prev_str, Point(120, 420), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255,255,255), 1, FILLED);
+
+					shotTotal++;
+
+					fgp = (float) madeShots/shotTotal;
+					stringstream made_ss;
+					made_ss << madeShots << "/" << shotTotal  << " : " << fgp;
+					string made_str = made_ss.str();
+					putText(bbsrc, made_str, Point(120, 420), FONT_HERSHEY_SIMPLEX, 0.5, blueColor, 1, FILLED);
+					prev_str = made_str;
+
 					putText(bbsrc, X_str, shotPoint, FONT_HERSHEY_SIMPLEX, 1 , redColor, 1, LINE_4);
+				}
 
 				isMadeShot = false;
 				firstIntersectPass = true;
@@ -349,7 +387,7 @@ int main(int argc, const char** argv)
 	    	{
 	    		int radiusIdx = 0;
 	    		//for (int radius = 40; radius < 280; radius += 20)   //Radius for euclidDistFromBB
-	    		for (int radius = 40; radius < 300; radius += 30)   //60)   //Radius for euclidDistFromBB
+	    		for (int radius = 40; radius < 280; radius += 26)   //60)   //Radius for euclidDistFromBB
 	    		{
 	    			radiusArray.push_back(radius);
 
