@@ -63,7 +63,8 @@ static void help()
 int main(int argc, const char** argv)
 {
 	//int debugFlag = false;
-	const string videoIdx 							= argc >= 2 ? argv[1] : "1";
+	bool leftside = true;
+	const string videoIdx = argc >= 2 ? argv[1] : "1";
 	int fileNumber;
 	string videofileName;
 	const string OUTNAME = "shottracker_output.mp4";
@@ -76,9 +77,11 @@ int main(int argc, const char** argv)
 	else {
 		fileNumber = 1;
 	}
+
 	stringstream vSS;
 	vSS << fileNumber;
-    string vIdx 									= vSS.str();
+    string vIdx = vSS.str();
+
 	if ( fileNumber <= 5 )
 	{
 		//videofileName 						= "/home/fred/Videos/testvideos/v" + vIdx + "-vga-fs.mp4";
@@ -99,19 +102,22 @@ int main(int argc, const char** argv)
 		videofileName 						= "/home/fred/Videos/testvideos/v" + vIdx + ".MOV";
 	}
 
+	if (fileNumber==25)
+		leftside = false;
+
     help();
 	int frameCount 									= 0;
 	int madeShots									= 0;
 	int shotTotal									= 0;
 	//int frameWindow									= 0;
 	const string bballPatternFile 					= "/home/fred/Pictures/OrgTrack_res/bball3_vga.jpg";
-	Mat patternImage 								= imread(bballPatternFile);
+	//Mat patternImage 								= imread(bballPatternFile);
 	const string bballFileName 						= "/home/fred/Pictures/OrgTrack_res/bball-half-court-vga.jpeg";
     VideoCapture cap(videofileName);
     VideoWriter outputVideo;
     Mat bbsrc 										= imread(bballFileName);	
 	int thresh 										= 85;
-	RNG rng(12345);
+	//RNG rng(12345);
 	int newPlayerWindowSize 						= 50;
 	vector <int> radiusArray;
 	vector <int> radiusRangeArray;
@@ -119,8 +125,7 @@ int main(int argc, const char** argv)
 	vector<Vec4i> hierarchy;
 	namedWindow("halfcourt", WINDOW_NORMAL);
 
-	Ptr<BackgroundSubtractor> bg_model;
-    bg_model 										= createBackgroundSubtractorMOG2(30, 16.0, false);
+	Ptr<BackgroundSubtractor> bg_model 				= createBackgroundSubtractorMOG2(30, 16.0, false);
     Mat img;					//Source image from camera.  It may be scaled for efficiency reasons.
 	Mat grayImage;				//Gray image of source image.
 	Mat fgmask;					//Foreground mask image.
@@ -176,7 +181,6 @@ int main(int argc, const char** argv)
 	double xDistFromBB=0;
 	double yDistFromBB=0;
 
-
 	dnn::Net net = readNetFromDarknet(modelConfig, modelBinary);
 	if (net.empty())
 	{
@@ -220,6 +224,10 @@ int main(int argc, const char** argv)
 	Mat finalImg(S.height, S.width + S.width, CV_8UC3);
     outputVideo.open(OUTNAME, ex, cap.get(CV_CAP_PROP_FPS), outS, true);
 
+	//IplImage *segmentated = cvCreateImage(S, 8, 1);
+	//IplImage *labelImg = cvCreateImage(S, IPL_DEPTH_LABEL, 1);
+	//IplImage* body_labelImg = cvCreateImage(S, IPL_DEPTH_LABEL, 1);
+
 
 	leftActiveBoundary 			= firstFrame.cols/4;  
 //	rightActiveBoundary			= firstFrame.cols*3/4;
@@ -240,7 +248,6 @@ int main(int argc, const char** argv)
 	// Initialize the shotWindow with dummy values
 //	for (int i=0; i<105; i++)
 //		shotWindowMeta.push_back(make_pair(80, 150));
-
 
     for(;;)
     {
@@ -263,7 +270,6 @@ int main(int argc, const char** argv)
 		if (!haveBackboard)
 		{
 			shotWindowTuple.push_back( make_tuple (frameCount, 80, 150, 190, 250, 200) );
-
 
 			getGray(img,grayImage);											//Converts to a gray image.  All we need is a gray image for cv computing.
 			Canny(grayImage, grayImage, thresh, thresh*2, 3);
@@ -313,8 +319,16 @@ int main(int argc, const char** argv)
         				//Coords in true video content
 		                Backboard = Rect( Point(unionRect.br().x - unionRect.width,  unionRect.br().y - (unionRect.height * 1 / 3) ), unionRect.br() );
 
-        				BackboardCenterX = (Backboard.tl().x + (Backboard.width*3/4)) - 5;   // (Backboard.tl().x+(Backboard.width/2));     // A pure guess
-        				BackboardCenterY = (Backboard.tl().y + (Backboard.height*3/4));    // (Backboard.tl().y+(Backboard.height/2));  // A pure guess
+		                if (fileNumber!=25)
+		                {
+							BackboardCenterX = (Backboard.tl().x + (Backboard.width*3/4)) - 5;   // (Backboard.tl().x+(Backboard.width/2));     // A pure guess
+							BackboardCenterY = (Backboard.tl().y + (Backboard.height*3/4));    // (Backboard.tl().y+(Backboard.height/2));  // A pure guess
+		                }
+        				else if (fileNumber==25)
+        				{
+            				BackboardCenterX = (Backboard.tl().x + (Backboard.width*1/4)) + 5;   // (Backboard.tl().x+(Backboard.width/2));     // A pure guess
+            				BackboardCenterY = (Backboard.tl().y + (Backboard.height*1/4));    // (Backboard.tl().y+(Backboard.height/2));  // A pure guess
+        				}
 
         				madeRoIRect = Rect( Point(BackboardCenterX-10, Backboard.tl().y + Backboard.height/2), Point(BackboardCenterX+10, Backboard.br().y) );
 
@@ -324,7 +338,6 @@ int main(int argc, const char** argv)
 				}  //(boundRect[i].x > leftBBRegionLimit)
 
 			}  //( size_t i = 0; i < boardContours.size(); i++ )
-
 		}   //if (!haveBackboard)
 
 		///*************************End of main code to detect BackBoard*************************
@@ -353,7 +366,6 @@ int main(int argc, const char** argv)
 					made_ss << madeShots << "/" << shotTotal << " : " << fgp;
 					string made_str = made_ss.str();
 					putText(bbsrc, made_str, Point(120, 420), FONT_HERSHEY_SIMPLEX, 0.5, blueColor, 1, FILLED);
-
 
 					putText(bbsrc, O_str, shotPoint, FONT_HERSHEY_SIMPLEX, 1 , greenColor, 1, LINE_4);
 				}
@@ -410,7 +422,6 @@ int main(int argc, const char** argv)
 
 	    			radiusRangeArray.push_back(k-1);
 
-
 	    			radiusIdx++;
 	    		}
 	    		semiCircleReady = true;
@@ -432,7 +443,6 @@ int main(int argc, const char** argv)
 					double r = ((double)c.val[2])/255.;
 
 					unsigned char f = 255 * ( ( r > 0.12 + g ) && ( r > 0.16 + b ) && ( g > 0.013 + b) );   //Yes good for now!  Detecting color of basketball.
-
 					cvSet2D(segmentated, j, i, CV_RGB(f, f, f));
 				}
 			}
@@ -444,6 +454,7 @@ int main(int argc, const char** argv)
 			cvLabel(segmentated, labelImg, blobs);
 			cvFilterByArea(blobs, 75, 1000000);    //Tuning to filter-in the area of the object I care about.
 			//cvUpdateTracks(blobs, tracks, 2., 10, 2);   //Note:  Since I am only looking t blobs, may not need updatetracks.
+			cvReleaseImage(&segmentated);
 
 			unsigned left = 0, top = 0;
 			unsigned t_width = 0, t_height = 0;
@@ -545,12 +556,12 @@ int main(int argc, const char** argv)
 
 					if (current_xshift < 30)
 					{
-						shotMeta = shotMetaCurrent;
-						take_a_size = current_xshift;  //max(get<1>(shotMeta), get<3>(shotMeta));
+						shotMeta = shotMetaCurrent;    //Expect that you are close to the rim.  so use the current tracked position
+						take_a_size = current_xshift;  //Using current tracked position
 					}
 					else
 					{
-						take_a_size = max(get<1>(shotMeta), get<3>(shotMeta));
+						take_a_size = max(get<1>(shotMeta), get<3>(shotMeta));  //Expect you are further away, use rought 100 frames previous position
 					}
 
 					cout << "shotMeta:   frameCount=" << get<0>(shotMeta) << "   hgtAvg=" << get<1>(shotMeta) << "   XShift=" << get<2>(shotMeta)
@@ -559,47 +570,100 @@ int main(int argc, const char** argv)
 					int radiusIdx = findIndex_BSearch( radiusArray, take_a_size );   //unionBodyRect.height);
 					cout << frameCount << " :  radiusIdx=" << radiusIdx << endl;
 
-					int valueRange = radiusRangeArray.at(radiusIdx);
-					cout << frameCount << " :  valueRange=" << valueRange << endl;
-					int leftSideRange = valueRange * 0.3;
-					int rightSideRange = valueRange - leftSideRange;
-					cout << frameCount << " : leftSideRange=" << leftSideRange << "   rightSideRange=" << rightSideRange << endl;
-					int xshift = get<2>(shotMeta);
+
+					//This logic is designed to help determine where on the ring was the shot taken.
+					//You have to reverse the data when capturing the court from the opposite direction.
 					int placementIdx;
-					if ( xshift > 0 )
+					if (leftside)
 					{
-						if (get<1>(shotMeta) < 80)
+						//capturing from the left side.
+						int valueRange = radiusRangeArray.at(radiusIdx);
+						cout << frameCount << " :  valueRange=" << valueRange << endl;
+						int leftSideRange = valueRange * 0.3;
+						int rightSideRange = valueRange - leftSideRange;
+						cout << frameCount << " : leftSideRange=" << leftSideRange << "   rightSideRange=" << rightSideRange << endl;
+						int xshift = get<2>(shotMeta);
+						if ( xshift > 0 )
 						{
-							xshift += 120;
-							if (xshift > 260)
-								xshift = 260;
+							if (get<1>(shotMeta) < 80)
+							{
+								xshift += 120;
+								if (xshift > 260)
+									xshift = 260;
+							}
+							else
+							{
+								if (xshift > 260 && get<1>(shotMeta) < 80)
+									xshift = 260;
+								else
+									xshift = xshift/2;
+							}
+
+							cout << frameCount << " : xshift=" << xshift << endl;
+
+							float percent = (float) xshift / 260;
+							placementIdx = percent * rightSideRange;
+							placementIdx += leftSideRange;   //Note: must apply offset of left range to make sure we are only choosing indexes in the right range.
+							cout << frameCount << " :Right Side  percent=" << percent << "   placementIdx=" << placementIdx << endl;
 						}
 						else
 						{
-							if (xshift > 260 && get<1>(shotMeta) < 80)
-								xshift = 260;
-							else
-								xshift = xshift/2;
+							if (current_xshift > 29)
+								xshift = xshift/8;
+							xshift = -1 * xshift;
+
+							cout << frameCount << " : xshift=" << xshift << endl;
+							float percent = (float) xshift / 250;   //180;
+							//percent = 1.0 - percent;
+							placementIdx = percent * leftSideRange;
+							cout << frameCount << " :Left Side  percent=" << percent << "   placementIdx=" << placementIdx << endl;
 						}
-
-						cout << frameCount << " : xshift=" << xshift << endl;
-
-						float percent = (float) xshift / 260;
-						placementIdx = percent * rightSideRange;
-						placementIdx += leftSideRange;   //Note: must apply offset of left range to make sure we are only choosing indexes in the right range.
-						cout << frameCount << " :Right Side  percent=" << percent << "   placementIdx=" << placementIdx << endl;
 					}
 					else
 					{
-						if (current_xshift > 29)
-							xshift = xshift/8;
-						xshift = -1 * xshift;
+						//capturing from the right side.
+						int valueRange = radiusRangeArray.at(radiusIdx);
+						cout << frameCount << " :  valueRange=" << valueRange << endl;
+						int rightSideRange = valueRange * 0.3;
+						int leftSideRange = valueRange - rightSideRange;
+						cout << frameCount << " : leftSideRange=" << leftSideRange << "   rightSideRange=" << rightSideRange << endl;
+						int xshift = get<2>(shotMeta);
+						if ( xshift < 0 )
+						{
+							if (get<1>(shotMeta) < 80)
+							{
+								xshift -= 120;
+								if (xshift < 260)
+									xshift = 260;
+							}
+							else
+							{
+								if (xshift < 260 && get<1>(shotMeta) < 80)
+									xshift = 260;
+								else
+									xshift = xshift/2;
+							}
 
-						cout << frameCount << " : xshift=" << xshift << endl;
-						float percent = (float) xshift / 250;   //180;
-						//percent = 1.0 - percent;
-						placementIdx = percent * leftSideRange;
-						cout << frameCount << " :Left Side  percent=" << percent << "   placementIdx=" << placementIdx << endl;
+							cout << frameCount << " : xshift=" << xshift << endl;
+
+							float percent = (float) xshift / 260;
+							placementIdx = percent * leftSideRange; //rightSideRange;
+							//placementIdx += leftSideRange;   //Note: must apply offset of left range to make sure we are only choosing indexes in the right range.
+							cout << frameCount << " :Left Side  percent=" << percent << "   placementIdx=" << placementIdx << endl;
+						}
+						else
+						{
+							if (current_xshift > 29)
+								xshift = xshift/8;
+							//xshift = -1 * xshift;
+
+							cout << frameCount << " : xshift=" << xshift << endl;
+							float percent = (float) xshift / 250;   //180;
+							//percent = 1.0 - percent;
+							placementIdx = percent * rightSideRange;  //leftSideRange;
+							placementIdx += leftSideRange;   //Note: must apply offset of left range to make sure we are only choosing indexes in the right range.
+							cout << frameCount << " :Right Side  percent=" << percent << "   placementIdx=" << placementIdx << endl;
+						}
 					}
 
 					shotPoint = Point(courtArc[radiusIdx][placementIdx].x, courtArc[radiusIdx][placementIdx].y);
@@ -633,6 +697,9 @@ int main(int argc, const char** argv)
 			cvLabel(body_segmentated, body_labelImg, body_blobs);
 			cvUpdateTracks(body_blobs, body_tracks, 200., 1, 1);
 
+			delete body_segmentated;
+			cvReleaseImage(&body_labelImg);
+
 			bool firstRect = true;
 			vector<cv::Rect> body_trRects;
 			for (CvBlobs::const_iterator jt = body_blobs.begin(); jt!=body_blobs.end(); ++jt)
@@ -647,8 +714,6 @@ int main(int argc, const char** argv)
 			  float f_width = (float) t_width;
 			  float f_height = (float) t_height;
 			  cv::Rect localRect = cv::Rect(left, top, t_width, t_height);
-
-
 
 			  if ( f_height > (f_width*1.5) )
 			  {
@@ -750,7 +815,6 @@ int main(int argc, const char** argv)
 			imwrite("/home/fred/Temp/Temp/temp/image" + i_str + ".jpg", img);
 
 			cvReleaseImage(&labelImg);
-			cvReleaseImage(&segmentated);
 		}  //if (haveBackboard)
 
 		//Create string of frame counter to display on video window.
@@ -774,7 +838,6 @@ int main(int argc, const char** argv)
 
     return 0;
 }
-
 
 //Blurs, i.e. smooths, an image using the normalized box filter.  Used to reduce noise.
 void getGray(const Mat& image, Mat& gray)
@@ -940,6 +1003,7 @@ double oneDDist(double p1, double p2) {
 	
 	return dist;
 }
+
 int findIndex_BSearch(const vector< int> &numbersArray, int key) {
 
 	int iteration = 0;
