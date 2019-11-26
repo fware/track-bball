@@ -131,6 +131,7 @@ int main(int argc, const char** argv)
 	Mat fgmask;					//Foreground mask image.
 	Rect ballRect;				//Represents the box around the trackable basketball
 	vector< vector<Point> > boardContours;	
+	Scalar hotpinkColor 							= Scalar (180, 105, 255);
 	Scalar greenColor 								= Scalar (0, 180, 0);
 	Scalar darkgreenColor 							= Scalar (0, 104, 0);
 	//Scalar color1    							    = Scalar (25, 0, 51);
@@ -147,6 +148,7 @@ int main(int argc, const char** argv)
 	Mat firstFrame;
 	bool semiCircleReady 							= false;
 	bool isMadeShot									= false;
+	bool strongMadeShot									= false;
 	Rect offsetBackboard;
 	Rect Backboard;
 	Rect madeRoIRect;
@@ -180,6 +182,8 @@ int main(int argc, const char** argv)
 	deque< tuple<int, int, int, int, int, int> > shotWindowTuple;
 	double xDistFromBB=0;
 	double yDistFromBB=0;
+	String label;
+	String prev_label;
 
 	dnn::Net net = readNetFromDarknet(modelConfig, modelBinary);
 	if (net.empty())
@@ -330,7 +334,9 @@ int main(int argc, const char** argv)
             				BackboardCenterY = (Backboard.tl().y + (Backboard.height*1/4));    // (Backboard.tl().y+(Backboard.height/2));  // A pure guess
         				}
 
-        				madeRoIRect = Rect( Point(BackboardCenterX-10, Backboard.tl().y + Backboard.height/2), Point(BackboardCenterX+10, Backboard.br().y) );
+        				madeRoIRect = Rect( Point(BackboardCenterX-6, Backboard.tl().y + Backboard.height/2), Point(BackboardCenterX+6, Backboard.br().y) );
+        				madeRoIRect.height = (int) madeRoIRect.height * 3 / 4;
+        				madeRoIRect.y = madeRoIRect.y - ((int)madeRoIRect.height/4);
 
         				haveBackboard = true;
         			}
@@ -344,13 +350,15 @@ int main(int argc, const char** argv)
 
 		///*******Start of main code to detect Basketball*************************
 		putText(bbsrc, "Field Goals: ", Point(18, 420), FONT_HERSHEY_SIMPLEX, 0.5, blueColor, 1, FILLED);
+
 		frame_ss << frameCount;
 		string frame_str = frame_ss.str();
 		if (haveBackboard)
 		{
 			if (frameCount > firstIntersectPassThresh && !firstIntersectPass)
 			{
-				if (isMadeShot)
+				cout << "Final Shot Test  isMadeShot=" << isMadeShot << "   strongMadeShot=" << strongMadeShot << endl;
+				if (isMadeShot && strongMadeShot)
 				{
 					float fgp = (float) madeShots/shotTotal;
 					stringstream prev_ss;
@@ -368,6 +376,10 @@ int main(int argc, const char** argv)
 					putText(bbsrc, made_str, Point(120, 420), FONT_HERSHEY_SIMPLEX, 0.5, blueColor, 1, FILLED);
 
 					putText(bbsrc, O_str, shotPoint, FONT_HERSHEY_SIMPLEX, 1 , greenColor, 1, LINE_4);
+
+					putText(bbsrc, prev_label, Point(18, 450), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255,255,255), 1, FILLED);
+					putText(bbsrc, label, Point(18, 450), FONT_HERSHEY_SIMPLEX, 0.5, greenColor, 1, 0.5);
+					prev_label = label;
 				}
 				else
 				{
@@ -387,13 +399,17 @@ int main(int argc, const char** argv)
 					prev_str = made_str;
 
 					putText(bbsrc, X_str, shotPoint, FONT_HERSHEY_SIMPLEX, 1 , redColor, 1, LINE_4);
+
+					putText(bbsrc, prev_label, Point(18, 450), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255,255,255), 1, FILLED);
+					prev_label = label;
 				}
 
+
 				isMadeShot = false;
+				strongMadeShot = false;
 				firstIntersectPass = true;
 			}
 
-			putText(bbsrc, "C",	bbCenterPosit,	FONT_HERSHEY_PLAIN, 1,	greenColor, 2, 0.5);
 
 	    	if (!semiCircleReady)
 	    	{
@@ -484,66 +500,83 @@ int main(int argc, const char** argv)
 					if (madeIntersect.area() > 0)
 					{
 						isMadeShot = true;
+
+						//Predict a made shot
+						Mat basketRoI = img(madeRoIRect).clone();
+						//resize(basketRoI, basketRoI, Size(416,416));
+
+						//! [Prepare blob]
+						Mat inputBlob = blobFromImage(basketRoI, 1 / 255.F, Size(416, 416), Scalar(), true, false); //Convert Mat to batch of images
+						//! [Prepare blob]
+
+						//! [Set input blob]
+						net.setInput(inputBlob, "data");                   //set the network input
+						//! [Set input blob]
+
+						//! [Make forward pass]
+						Mat detectionMat = net.forward("detection_out");   //compute output
+
+						if (detectionMat.rows > 0)
+						{
+							for (int i = 0; i < detectionMat.rows; i++)
+							{
+								const int probability_index = 5;
+								const int probability_size = detectionMat.cols - probability_index;
+								float *prob_array_ptr = &detectionMat.at<float>(i, probability_index);
+
+								size_t objectClass = max_element(prob_array_ptr, prob_array_ptr + probability_size) - prob_array_ptr;
+								float confidence = detectionMat.at<float>(i, (int)objectClass + probability_index);
+
+								if (confidence > 0.0)
+								{
+									strongMadeShot = true;
+									cout << "FBug  confidence=" << confidence << endl;
+								}
+
+								if (confidence > 0.24)
+								{
+									float x = detectionMat.at<float>(i, 0);
+									float y = detectionMat.at<float>(i, 1);
+									float width = detectionMat.at<float>(i, 2);
+									float height = detectionMat.at<float>(i, 3);
+									int xLeftBottom = static_cast<int>((x - width / 2) * basketRoI.cols);
+									int yLeftBottom = static_cast<int>((y - height / 2) * basketRoI.rows);
+									int xRightTop = static_cast<int>((x + width / 2) * basketRoI.cols);
+									int yRightTop = static_cast<int>((y + height / 2) * basketRoI.rows);
+
+									Rect object(xLeftBottom, yLeftBottom,
+												xRightTop - xLeftBottom,
+												yRightTop - yLeftBottom);
+
+									if (objectClass < classNamesVec.size())
+									{
+										frame_ss.str("");
+										frame_ss << confidence;
+										String conf(frame_ss.str());
+										label = String(classNamesVec[objectClass]) + ": " + conf;
+
+										cout << "   label=" << label << endl;
+									}
+									else
+									{
+										label = "miss";
+										cout << "Class: " << objectClass << endl;
+										cout << "Confidence: " << confidence << endl;
+										cout << " " << xLeftBottom
+											 << " " << yLeftBottom
+											 << " " << xRightTop
+											 << " " << yRightTop << endl;
+									}
+								}
+							}
+						}   //(detectionMat.rows > 0)
+						//else
+						//{
+						//	prev_label = label;
+						//}
+
 					}
 
-					/*
-					//Predict a made shot
-					Mat basketRoI = img(Backboard).clone();
-					//resize(basketRoI, basketRoI, Size(416,416));
-
-					//! [Prepare blob]
-					Mat inputBlob = blobFromImage(basketRoI, 1 / 255.F, Size(416, 416), Scalar(), true, false); //Convert Mat to batch of images
-					//! [Prepare blob]
-
-					//! [Set input blob]
-					net.setInput(inputBlob, "data");                   //set the network input
-					//! [Set input blob]
-
-					//! [Make forward pass]
-					Mat detectionMat = net.forward("detection_out");   //compute output
-
-					for (int i = 0; i < detectionMat.rows; i++)
-					{
-						const int probability_index = 5;
-						const int probability_size = detectionMat.cols - probability_index;
-						float *prob_array_ptr = &detectionMat.at<float>(i, probability_index);
-
-						size_t objectClass = max_element(prob_array_ptr, prob_array_ptr + probability_size) - prob_array_ptr;
-						float confidence = detectionMat.at<float>(i, (int)objectClass + probability_index);
-
-						if (confidence > 0.24)
-						{
-							float x = detectionMat.at<float>(i, 0);
-							float y = detectionMat.at<float>(i, 1);
-							float width = detectionMat.at<float>(i, 2);
-							float height = detectionMat.at<float>(i, 3);
-							int xLeftBottom = static_cast<int>((x - width / 2) * basketRoI.cols);
-							int yLeftBottom = static_cast<int>((y - height / 2) * basketRoI.rows);
-							int xRightTop = static_cast<int>((x + width / 2) * basketRoI.cols);
-							int yRightTop = static_cast<int>((y + height / 2) * basketRoI.rows);
-
-							Rect object(xLeftBottom, yLeftBottom,
-										xRightTop - xLeftBottom,
-										yRightTop - yLeftBottom);
-
-							if (objectClass < classNamesVec.size())
-							{
-								frame_ss.str("");
-								frame_ss << confidence;
-								String conf(frame_ss.str());
-								String label = String(classNamesVec[objectClass]) + ": " + conf;
-							}
-							else
-							{
-								cout << "Class: " << objectClass << endl;
-								cout << "Confidence: " << confidence << endl;
-								cout << " " << xLeftBottom
-									 << " " << yLeftBottom
-									 << " " << xRightTop
-									 << " " << yRightTop << endl;
-							}
-						}
-					}*/
 					//********End of Shot Prediction **********
 					//---Start of using player position on halfcourt image to draw shot location-----
 					auto shotMetaCurrent = shotWindowTuple.back();
@@ -566,10 +599,9 @@ int main(int argc, const char** argv)
 
 					cout << "shotMeta:   frameCount=" << get<0>(shotMeta) << "   hgtAvg=" << get<1>(shotMeta) << "   XShift=" << get<2>(shotMeta)
 						 <<	"    euclidDist=" << get<3>(shotMeta) << endl;
-
+					cout << "        take_a_size=" << take_a_size << endl;
 					int radiusIdx = findIndex_BSearch( radiusArray, take_a_size );   //unionBodyRect.height);
 					cout << frameCount << " :  radiusIdx=" << radiusIdx << endl;
-
 
 					//This logic is designed to help determine where on the ring was the shot taken.
 					//You have to reverse the data when capturing the court from the opposite direction.
@@ -583,16 +615,20 @@ int main(int argc, const char** argv)
 						int rightSideRange = valueRange - leftSideRange;
 						cout << frameCount << " : leftSideRange=" << leftSideRange << "   rightSideRange=" << rightSideRange << endl;
 						int xshift = get<2>(shotMeta);
+						cout << "       xshift=" << xshift << endl;
 						if ( xshift > 0 )
 						{
-							if (get<1>(shotMeta) < 80)
+							cout << "get<1>(shotMeta)=" << get<1>(shotMeta) << endl;
+							if (get<1>(shotMeta) < 70)
 							{
+								cout << "xshift=" << xshift << "  shotMeta is less than 80" << endl;
 								xshift += 120;
 								if (xshift > 260)
 									xshift = 260;
 							}
 							else
 							{
+								cout << "xshift=" << xshift << "  shotMeta is greater 80" << endl;
 								if (xshift > 260 && get<1>(shotMeta) < 80)
 									xshift = 260;
 								else
@@ -733,7 +769,7 @@ int main(int argc, const char** argv)
 			hgtArray.push_back(unionBodyRect.height);
 			if (frameCount > 120)    //We start collecting stats at frame 100 and must collect at 20 measures to start the calculation
 			{
-				if (frameCount % 20 == 0)
+				if (frameCount % 10 == 0)
 				{
 					sort(hgtArray.begin(), hgtArray.end());
 					hgtArray.erase (hgtArray.begin());
@@ -752,7 +788,7 @@ int main(int argc, const char** argv)
 			if ( (unionBodyRect.width > unionBodyRect.height) || (unionBodyRect.width > 95) )
 				continue;
 
-			rectangle(img, unionBodyRect.tl(), unionBodyRect.br(), darkgreenColor, 2, 8, 0);
+			rectangle(img, unionBodyRect.tl(), unionBodyRect.br(), hotpinkColor, 2, 8, 0);
 
 			//-----------Identifying player height and position!!--------------
 			Point bodyCenter( unionBodyRect.x + unionBodyRect.width*0.5, unionBodyRect.y + unionBodyRect.height*0.5 );
@@ -786,7 +822,7 @@ int main(int argc, const char** argv)
 			stringstream y_ss;
 			y_ss << yDistFromBB;
 			string full_str = eu_ss.str() + " (" + x_ss.str() + "," + y_ss.str() + ")";
-			putText(img, full_str,Point(eu_mid_x - 15, eu_mid_y - 5), FONT_HERSHEY_PLAIN, 1, blueColor, 2, 0.5);
+			putText(img, full_str, Point(eu_mid_x - 15, eu_mid_y - 5), FONT_HERSHEY_PLAIN, 1, blueColor, 2, 0.5);
 
 
 			stringstream hss;
@@ -797,7 +833,7 @@ int main(int argc, const char** argv)
 			string havg_str = havg_ss.str();
 			putText(img, havg_str,Point((int)unionBodyRect.x + unionBodyRect.width*0.5-10,
 										(int)unionBodyRect.y + unionBodyRect.height*0.5),
-									FONT_HERSHEY_PLAIN, 1, darkgreenColor, 2, 0.5);
+									FONT_HERSHEY_PLAIN, 1, hotpinkColor, 2, 0.5);
 
 			rectangle(img, Backboard.tl(), Backboard.br(), redColor, 2, 8, 0);
 
