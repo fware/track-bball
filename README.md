@@ -1,3 +1,3 @@
 # track-bball
 
-My reference program for tracking a person and ball, and a make or missed shot at the basket.
+A reference program for tracking a person with a basketball, and inferring when making and missing shots at the basket.
